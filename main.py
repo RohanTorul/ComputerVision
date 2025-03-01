@@ -26,12 +26,30 @@ while True:
     lower_bright_red = np.array([0, 0, 120])  # More relaxed on red detection  
     upper_bright_red = np.array([120, 120, 255])  # Allow broader variations in B & G  
 
+    mask_red = cv2.inRange(frame, lower_bright_red, upper_bright_red)
+
+    # Mask for white (255, 255, 255)
+    lower_white = np.array([200, 200, 200])  # Threshold for white
+    upper_white = np.array([255, 255, 255])
+    mask_white = cv2.inRange(frame, lower_white, upper_white)
+
+    # Mask for grey (same R, G, and B values)
+    lower_grey = np.array([100, 100, 100])  # Low grey
+    upper_grey = np.array([180, 180, 180])  # High grey
+    mask_grey = cv2.inRange(frame, lower_grey, upper_grey)
+
+    # Combine the white and grey masks
+    mask_remove_white_grey = cv2.bitwise_or(mask_white, mask_grey)
+
+    # Remove white and grey by inverting the mask and combining it with the red mask
+    mask_total = cv2.bitwise_and(mask_red, cv2.bitwise_not(mask_remove_white_grey))
+
 
 # Dark Red (to be excluded if unwanted)
     #lower_dark_red = np.array([0, 0, 100])  
     #upper_dark_red = np.array([80, 80, 255])  
 
-    mask_total = cv2.inRange(frame, lower_bright_red, upper_bright_red)
+   
     #mask2 = cv2.inRange(frame, lower_dark_red, upper_dark_red)
 
     #mask_total = cv2.bitwise_or(mask1, mask2)  # Combine both
@@ -55,7 +73,7 @@ while True:
         area = cv2.contourArea(contour)
         perimeter = cv2.arcLength(contour, True)
 
-        if area < 4 or area > 400:
+        if area < 1 or area > 400:
             continue 
 
         approx_contour = cv2.approxPolyDP(contour, epsilon=0.1 * perimeter, closed=True)
@@ -63,6 +81,7 @@ while True:
         # Bounding box to check aspect ratio
         x, y, w, h = cv2.boundingRect(contour)
         aspect_ratio = float(w) / h
+
         
         # Check shape similarity to a circle
         area = cv2.contourArea(contour)
