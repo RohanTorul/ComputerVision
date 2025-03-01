@@ -29,7 +29,7 @@ while True:
     mask_red = cv2.inRange(frame, lower_bright_red, upper_bright_red)
 
     # Mask for white (255, 255, 255)
-    lower_white = np.array([200, 200, 200])  # Threshold for white
+    lower_white = np.array([100, 100, 100])  # Threshold for white
     upper_white = np.array([255, 255, 255])
     mask_white = cv2.inRange(frame, lower_white, upper_white)
 
@@ -40,6 +40,12 @@ while True:
 
     # Combine the white and grey masks
     mask_remove_white_grey = cv2.bitwise_or(mask_white, mask_grey)
+
+    kernel = np.ones((12, 12), np.uint8)
+
+    #mask_remove_white_grey = cv2.erode(mask_remove_white_grey, kernel, iterations=3)  # Erode to remove small, thin streaks
+    #mask_remove_white_grey = cv2.dilate(mask_remove_white_grey, kernel, iterations=3) 
+    #mask_remove_white_grey = cv2.morphologyEx(mask_remove_white_grey, cv2.MORPH_CLOSE, kernel)
 
     # Remove white and grey by inverting the mask and combining it with the red mask
     mask_total = cv2.bitwise_and(mask_red, cv2.bitwise_not(mask_remove_white_grey))
@@ -59,12 +65,13 @@ while True:
     # Combine the masks using bitwise OR to capture both red regions
     #mask_total = cv2.bitwise_or(mask1, mask2)
 
-    kernel = np.ones((7, 7), np.uint8)
+    
     mask_total = cv2.morphologyEx(mask_total, cv2.MORPH_CLOSE, kernel)
 
-
+    #mask_total = cv2.erode(mask_total, kernel, iterations=2)  # Erode to remove small, thin streaks
+    #mask_total = cv2.dilate(mask_total, kernel, iterations=2) 
     # Apply the mask to get only red parts
-    red_balloons = cv2.bitwise_and(frame, frame, mask=mask_total)
+    #red_balloons = cv2.bitwise_and(frame, frame, mask=mask_total)
 
     # Find contours in the masked image (potential balloons)
     contours, _ = cv2.findContours(mask_total, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -82,6 +89,8 @@ while True:
         x, y, w, h = cv2.boundingRect(contour)
         aspect_ratio = float(w) / h
 
+        if((w > 0.6*area) or (h > 0.6*area)):
+            continue
         
         # Check shape similarity to a circle
         area = cv2.contourArea(contour)
