@@ -1,8 +1,8 @@
 import cv2
 import numpy as np
+#from groundtest import generate_random_image
 # Initialize the webcam
-cap = cv2.VideoCapture(1)
-
+cap = cv2.VideoCapture(2)
 while True:
     # Capture a frame from the webcam
     ret, frame = cap.read()
@@ -23,6 +23,18 @@ while True:
     #mask1 = cv2.inRange(hsv, lower_red, upper_red)
     #mask2 = cv2.inRange(hsv, lower_red_high, upper_red_high)
     # Bright Red
+    X_dimention, Y_dimention, _ = frame.shape
+    line_section = np.concatenate(
+        (
+            np.linspace(0,Y_dimention/4,10),
+            np.linspace(Y_dimention/4,Y_dimention/2,5),
+            np.linspace(Y_dimention/2,3*Y_dimention/4,5),
+            np.linspace(3*Y_dimention/4,Y_dimention,10)
+        ),axis=0)
+    #cv2.line(img=frame, pt1=(10, 10), pt2=(100, 10), color=(255, 0, 0), thickness=2, lineType=8, shift=0)
+   
+
+
     lower_bright_red = np.array([0, 0, 120])  # More relaxed on red detection  
     upper_bright_red = np.array([120, 120, 255])  # Allow broader variations in B & G  
 
@@ -80,7 +92,7 @@ while True:
         area = cv2.contourArea(contour)
         perimeter = cv2.arcLength(contour, True)
 
-        if area < 1 or area > 400:
+        if area < 5 or area >500:
             continue 
 
         approx_contour = cv2.approxPolyDP(contour, epsilon=0.1 * perimeter, closed=True)
@@ -89,8 +101,6 @@ while True:
         x, y, w, h = cv2.boundingRect(contour)
         aspect_ratio = float(w) / h
 
-        if((w > 0.6*area) or (h > 0.6*area)):
-            continue
         
         # Check shape similarity to a circle
         area = cv2.contourArea(contour)
@@ -98,22 +108,27 @@ while True:
         approx_vertices = len(approx_contour)
 
         circularity = (4 * np.pi * area) / (perimeter ** 2) if perimeter > 0 else 0
-
-        if 0.8 < aspect_ratio < 1.2 and 0.75 < circularity < 1.2:  
-            print(f"Red balloon detected. ({x}, {y})")
-            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
-            cv2.drawContours(frame, [approx_contour], 0, (0, 255, 0), 3)
+        
+        if 0.8 < aspect_ratio < 1.2 and 0.5 < circularity < 1 and approx_vertices > 2:  
+            if approx_contour is not None:
+            
+                print(f"Red balloon detected. ({x}, {y}: area: {area})")
+                cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+                #cv2.drawContours(frame, [approx_contour], 0, (0, 255, 0), 3)
 
         
         # Draw the contour if it's a potential balloon
-        if approx_contour is not None:
-            cv2.drawContours(frame, [approx_contour], 0, (0, 255, 0), 3)
+           
+    for line_x in line_section:
+        line_x = int(line_x)
+        cv2.line(img=frame, pt1=(line_x,0),pt2=(line_x,Y_dimention),color=(255,0,0),thickness = 2)
 
     # Display the frame with detected red balloons
     cv2.imshow('Red Balloons', frame)
 
     # Press 'q' to exit
     if cv2.waitKey(1) & 0xFF == ord('q'):
+        
         break
 
 # Release resources and close windows
