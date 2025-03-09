@@ -23,13 +23,13 @@ while True:
     #mask1 = cv2.inRange(hsv, lower_red, upper_red)
     #mask2 = cv2.inRange(hsv, lower_red_high, upper_red_high)
     # Bright Red
-    X_dimention, Y_dimention, _ = frame.shape
+    Y_dimention, X_dimention, _ = frame.shape
     line_section = np.concatenate(
         (
-            np.linspace(0,Y_dimention/4,10),
-            np.linspace(Y_dimention/4,Y_dimention/2,5),
-            np.linspace(Y_dimention/2,3*Y_dimention/4,5),
-            np.linspace(3*Y_dimention/4,Y_dimention,10)
+            np.linspace(0,X_dimention/4,5),
+            np.linspace(X_dimention/4,X_dimention/2,10),
+            np.linspace(X_dimention/2,3*X_dimention/4,10),
+            np.linspace(3*X_dimention/4,X_dimention,5)
         ),axis=0)
     #cv2.line(img=frame, pt1=(10, 10), pt2=(100, 10), color=(255, 0, 0), thickness=2, lineType=8, shift=0)
    
@@ -121,7 +121,7 @@ while True:
            
     for line_x in line_section:
         line_x = int(line_x)
-        cv2.line(img=frame, pt1=(line_x,0),pt2=(line_x,Y_dimention),color=(255,0,0),thickness = 2)
+        cv2.line(img=frame, pt1=(line_x,0),pt2=(line_x,X_dimention),color=(255,0,0),thickness = 2)
 
     # Display the frame with detected red balloons
     cv2.imshow('Red Balloons', frame)
