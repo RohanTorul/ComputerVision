@@ -22,6 +22,8 @@ def detect_hotspots(frame, threshold=150):
     # Draw contours on the original frame
     output_frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
     cv2.drawContours(output_frame, contours, -1, (0, 0, 255), 2)
+
+    
     
     return output_frame, contours
 
@@ -44,6 +46,20 @@ def main():
         
         # Detect hotspots
         processed_frame, _ = detect_hotspots(frame)
+
+        Y_dimention, X_dimention, _ = processed_frame.shape
+        line_section = np.concatenate(
+        (
+            np.linspace(0,X_dimention/4,5),
+            np.linspace(X_dimention/4,X_dimention/2,10),
+            np.linspace(X_dimention/2,3*X_dimention/4,10),
+            np.linspace(3*X_dimention/4,X_dimention,5)
+        ),axis=0)
+
+        for line_x in line_section:
+            line_x = int(line_x)
+            cv2.line(img=processed_frame, pt1=(line_x,0),pt2=(line_x,X_dimention),color=(255,0,0),thickness = 2)
+       
         
         cv2.imshow("Hotspot Detection", processed_frame)
         

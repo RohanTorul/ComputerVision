@@ -9,10 +9,10 @@ def generate_ir_frame(height=720, width=1080):
     frame = np.random.normal(50, 110, (height, width)).astype(np.uint8)  # Base IR noise
     
     # Generate random hotspots
-    num_hotspots = np.random.randint(3, 7)
+    num_hotspots = np.random.randint(3, 50)
     for _ in range(num_hotspots):
         center_x, center_y = np.random.randint(0, width), np.random.randint(0, height)
-        radius = np.random.randint(5, 20)
+        radius = np.random.randint(5, 10)
         intensity = np.random.randint(100, 255)
         
         cv2.circle(frame, (center_x, center_y), radius, intensity, -1, cv2.LINE_AA)
