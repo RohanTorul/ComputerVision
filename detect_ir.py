@@ -14,7 +14,7 @@ def detect_hotspots(frame, threshold=150):
     frame = cv2.GaussianBlur(frame, (5, 5), 2)
     
     # Apply thresholding to isolate hotspots
-    _, thresh = cv2.threshold(frame, threshold, 150, cv2.THRESH_BINARY)
+    _, thresh = cv2.threshold(frame, threshold, 255, cv2.THRESH_BINARY)
     
     # Find contours of hotspots
     contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -22,10 +22,8 @@ def detect_hotspots(frame, threshold=150):
     # Draw contours on the original frame
     output_frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
     cv2.drawContours(output_frame, contours, -1, (0, 0, 255), 2)
-
     
-    
-    return output_frame, contours
+    return output_frame, contours, thresh
 
 def main():
     """
@@ -45,21 +43,37 @@ def main():
             break
         
         # Detect hotspots
-        processed_frame, _ = detect_hotspots(frame)
-
-        Y_dimention, X_dimention, _ = processed_frame.shape
+        processed_frame, contours, thresh = detect_hotspots(frame)
+        
+        # Get frame dimensions
+        Y_dimension, X_dimension, _ = processed_frame.shape
+        midpoint = X_dimension // 2
+        
+        # Define line sections for sectors
         line_section = np.concatenate(
-        (
-            np.linspace(0,X_dimention/4,5),
-            np.linspace(X_dimention/4,X_dimention/2,10),
-            np.linspace(X_dimention/2,3*X_dimention/4,10),
-            np.linspace(3*X_dimention/4,X_dimention,5)
-        ),axis=0)
-
-        for line_x in line_section:
+            (
+                np.linspace(0, X_dimension / 4, 5),
+                np.linspace(X_dimension / 4, X_dimension / 2, 10),
+                np.linspace(X_dimension / 2, 3 * X_dimension / 4, 10),
+                np.linspace(3 * X_dimension / 4, X_dimension, 5)
+            ), axis=0)
+        
+        # Draw sector lines
+        for i, line_x in enumerate(line_section):
             line_x = int(line_x)
-            cv2.line(img=processed_frame, pt1=(line_x,0),pt2=(line_x,X_dimention),color=(255,0,0),thickness = 2)
-       
+            cv2.line(img=processed_frame, pt1=(line_x, 0), pt2=(line_x, Y_dimension), color=(255, 0, 0), thickness=2)
+        
+        # Label detected hotspots with their sector
+        for contour in contours:
+            x, y, w, h = cv2.boundingRect(contour)
+            cx = x + w // 2  # Center x-coordinate of hotspot
+            
+            # Determine sector number
+            sector_number = np.searchsorted(line_section, cx) - len(line_section) // 2
+            
+            # Draw text label near hotspot
+            cv2.putText(processed_frame, f"Sector {sector_number}", (x, y - 10), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
         
         cv2.imshow("Hotspot Detection", processed_frame)
         

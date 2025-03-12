@@ -3,7 +3,7 @@ import numpy as np
 import random
 import time
 
-def generate_random_image(width=1080, height=720, num_circles=50):
+def generate_random_image(width=1080, height=720, num_circles=10):
     # Create an empty image
     image = np.zeros((height, width, 3), dtype=np.uint8)
     
@@ -19,7 +19,7 @@ def generate_random_image(width=1080, height=720, num_circles=50):
     for _ in range(num_circles):
         center = (random.randint(0, width-1), random.randint(0, height-1))
         radius = random.randint(5,10)
-        color = (0, 0, random.randint(150,255))  # Red in BGR format
+        color = (0, 0, random.randint(100,220))  # Red in BGR format
         cv2.circle(image, center, radius, color, -1)
     
     return image
