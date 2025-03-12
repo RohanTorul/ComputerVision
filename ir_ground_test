@@ -1,0 +1,52 @@
+import cv2
+import numpy as np
+import time
+
+def generate_ir_frame(height=720, width=1080):
+    """
+    Generates a random infrared (IR) signature frame.
+    """
+    frame = np.random.normal(50, 110, (height, width)).astype(np.uint8)  # Base IR noise
+    
+    # Generate random hotspots
+    num_hotspots = np.random.randint(3, 7)
+    for _ in range(num_hotspots):
+        center_x, center_y = np.random.randint(0, width), np.random.randint(0, height)
+        radius = np.random.randint(5, 20)
+        intensity = np.random.randint(100, 255)
+        
+        cv2.circle(frame, (center_x, center_y), radius, intensity, -1, cv2.LINE_AA)
+        
+        # Apply Gaussian blur for a more natural IR look
+        frame = cv2.GaussianBlur(frame, (15, 15), 5)
+    
+    return frame
+
+def main(height=720, width=1080):
+    """
+    Runs an OpenCV window displaying simulated IR frames at 30 FPS.
+    """
+    fps = 10
+    delay = 1 / fps
+    cv2.namedWindow("IR Simulation", cv2.WINDOW_NORMAL)
+    cv2.resizeWindow("IR Simulation", width, height)
+    
+    while True:
+        start_time = time.time()
+        ir_frame = generate_ir_frame(height, width)
+        ir_frame_resized = cv2.resize(ir_frame, (width, height))  # Ensure correct display size
+        cv2.imshow("IR Simulation", ir_frame_resized)
+        
+        # Exit on pressing 'q'
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+        
+        # Ensure consistent frame rate
+        elapsed_time = time.time() - start_time
+        if elapsed_time < delay:
+            time.sleep(delay - elapsed_time)
+    
+    cv2.destroyAllWindows()
+
+if __name__ == "__main__":
+    main(1080, 1920)

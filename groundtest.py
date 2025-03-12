@@ -3,7 +3,7 @@ import numpy as np
 import random
 import time
 
-def generate_random_image(width=1716, height=966, num_circles=50):
+def generate_random_image(width=1080, height=720, num_circles=50):
     # Create an empty image
     image = np.zeros((height, width, 3), dtype=np.uint8)
     
