@@ -1,17 +1,24 @@
-import zmq
+import socket
 import time
 
-context = zmq.Context()
-socket = context.socket(zmq.PUB)  # PUB = Publisher mode
-socket.bind("tcp://localhost:5555")  # Bind to a port
+# Create a socket
+server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # Allow reusing the port
+server_socket.bind(('localhost', 5555))
+server_socket.listen(5)  # Allow multiple reconnection attempts
+
+print("Waiting for subscriber to connect...")
 
 while True:
-    # Example: Detect something with OpenCV and send commands
-    direction = "LEFT" if time.time() % 2 > 1 else "RIGHT"
-    value = int(time.time() % 10)  # Simulated value
+    client_socket, client_address = server_socket.accept()
+    print(f"Connected to {client_address}")
 
-    message = f"{direction} {value}"
-    print(f"Sending: {message}")
-    socket.send_string(message)
-
-    time.sleep(0.5)  # Simulate real-time updates
+    try:
+        message = "Hello, Lua Subscriber!  "  # 24 characters long
+        while True:
+            client_socket.sendall(message.encode())  # Send the message
+            print(f"Sent: {message}")
+            time.sleep(0.1)  # Send every 2 seconds
+    except (BrokenPipeError, ConnectionResetError, socket.error):
+        print("Client disconnected. Waiting for a new connection...")
+        client_socket.close()  # Ensure socket is closed and go back to waiting

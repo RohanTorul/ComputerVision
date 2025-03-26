@@ -1,8 +1,14 @@
 import cv2
 import numpy as np
+import zmq
+import time
+context = zmq.Context()
+socket = context.socket(zmq.PUB)  # PUB = Publisher mode
+socket.bind("tcp://localhost:5555")  # Bind to a port
+
 #from groundtest import generate_random_image
 # Initialize the webcam
-cap = cv2.VideoCapture(2)
+cap = cv2.VideoCapture(1)
 while True:
     # Capture a frame from the webcam
     ret, frame = cap.read()
@@ -119,6 +125,9 @@ while True:
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
                 #cv2.drawContours(frame, [approx_contour], 0, (0, 255, 0), 3)
 
+        message = f"{x} {y}"
+        print(f"Sending: {message}")
+        socket.send_string(message)
         
         # Draw the contour if it's a potential balloon
            
@@ -133,6 +142,8 @@ while True:
     if cv2.waitKey(1) & 0xFF == ord('q'):
         
         break
+
+ 
 
 # Release resources and close windows
 cap.release()

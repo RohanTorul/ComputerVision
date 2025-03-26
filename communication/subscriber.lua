@@ -1,20 +1,27 @@
-local zmq = require("lzmq")
-local context = zmq.context()
-local socket = context:socket(zmq.SUB)  -- SUB = Subscriber mode
-socket:connect("tcp://localhost:5555")  -- Connect to publisher
-
-socket:set_subscribe("")  -- Subscribe to all messages
+local socket = require("socket")
 
 while true do
-    print("waiting...")
-    local message = socket:recv()
-    print("Received:", message)
+    print("Attempting to connect to publisher...")
+    local client = socket.connect("localhost", 6666)
 
-    -- Parse the message (format: "DIRECTION VALUE")
-    local direction, value = message:match("(%w+) (%d+)")
-    
-    if direction and value then
-        print("Direction:", direction, " Value:", value)
-        -- You can use these values to control something in Lua
+    if client then
+        print("Connected to publisher.")
+        client:settimeout(nil)  -- Blocking mode (wait for message)
+
+        while true do
+            local message, err = client:receive(24)  -- Expecting exactly 24 characters
+            
+            if message then
+                print("Received:", message)
+            elseif err then
+                print("Connection lost. Reconnecting...")
+                break  -- Exit the loop to reconnect
+            end
+        end
+
+        client:close()  -- Close connection before retrying
+    else
+        print("Failed to connect. Retrying in 3 seconds...")
+        socket.sleep(3)  -- Prevents spamming connection attempts
     end
 end
