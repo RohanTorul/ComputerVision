@@ -1,5 +1,10 @@
 import cv2
 import numpy as np
+import zmq
+context = zmq.Context()
+socket = context.socket(zmq.PUB)  # PUB = Publisher mode
+socket.bind("tcp://localhost:5555")  # Bind to a port
+
 
 def detect_hotspots(frame, threshold=150):
     """
@@ -29,7 +34,7 @@ def main():
     """
     Captures video from an IR camera and detects hotspots in real time.
     """
-    cap = cv2.VideoCapture(2)  # Use default IR camera
+    cap = cv2.VideoCapture(1)  # Use default IR camera
     
     if not cap.isOpened():
         print("Error: Could not open camera.")
@@ -74,7 +79,10 @@ def main():
             # Draw text label near hotspot
             cv2.putText(processed_frame, f"Sector {sector_number}", (x, y - 10), 
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
-        
+
+            message = f"{sector_number}"
+            print(f"Sending: {message}")
+            socket.send_string(message)
         cv2.imshow("Hotspot Detection", processed_frame)
         
         # Exit on pressing 'q'

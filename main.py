@@ -125,9 +125,9 @@ while True:
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
                 #cv2.drawContours(frame, [approx_contour], 0, (0, 255, 0), 3)
 
-        message = f"{x} {y}"
-        print(f"Sending: {message}")
-        socket.send_string(message)
+                message = f"{sector_number}"
+                print(f"Sending: {message}")
+                socket.send_string(message)
         
         # Draw the contour if it's a potential balloon
            
