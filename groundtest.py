@@ -33,7 +33,7 @@ while True:
     
     # Maintain 60 FPS
     elapsed_time = time.time() - start_time
-    delay = max(1, int((1/60 - elapsed_time) * 1000))
+    delay = max(1, int((1/1 - elapsed_time) * 1000))
     if cv2.waitKey(delay) & 0xFF == ord('q'):
         break
 
