@@ -1,12 +1,28 @@
 import cv2
 import numpy as np
 import zmq
+class HotspotDetector:
+    def __init__(self, camera_index=4):
+
+        #Computer Vision Part
+        self.camera_index = camera_index
+        self.cap = cv2.VideoCapture(self.camera_index)
+        if not self.cap.isOpened():
+            raise Exception("Could not open camera.")
+        
+        #Communication Part
+        self.socket = None
+
+
+
+
+
 context = zmq.Context()
 socket = context.socket(zmq.PUB)  # PUB = Publisher mode
 socket.bind("tcp://localhost:5555")  # Bind to a port
 
 
-def detect_hotspots(frame, threshold=150):
+def detect_hotspots(frame, threshold=100, max_threshold=255):
     """
     Detects hotspots in an IR frame by applying thresholding and contour detection.
     """
@@ -16,25 +32,30 @@ def detect_hotspots(frame, threshold=150):
     frame = frame.astype(np.uint8)
     
     # Apply Gaussian blur to reduce noise
-    frame = cv2.GaussianBlur(frame, (5, 5), 2)
+    #frame = cv2.GaussianBlur(frame, (5, 5), 2) # DOES NOT WORK WELL FOR IR
     
     # Apply thresholding to isolate hotspots
-    _, thresh = cv2.threshold(frame, threshold, 255, cv2.THRESH_BINARY)
+    contour_stack = []
+    for current_threshold in range(threshold, max_threshold, 5):
+        _, thresh = cv2.threshold(frame, current_threshold, 255, cv2.THRESH_BINARY)
     
-    # Find contours of hotspots
-    contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        # Find contours of hotspots
+        contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if len(contours) > 0:
+            contour_stack.append(contours)
     
     # Draw contours on the original frame
+    brightest_contour = contour_stack.pop() if contour_stack else []
     output_frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
-    cv2.drawContours(output_frame, contours, -1, (0, 0, 255), 2)
+    cv2.drawContours(output_frame, brightest_contour, -1, (0, 0, 255), 2)
     
-    return output_frame, contours, thresh
+    return output_frame, brightest_contour, thresh
 
 def main():
     """
     Captures video from an IR camera and detects hotspots in real time.
     """
-    cap = cv2.VideoCapture(1)  # Use default IR camera
+    cap = cv2.VideoCapture(4)  # Use default IR camera
     
     if not cap.isOpened():
         print("Error: Could not open camera.")
@@ -58,10 +79,11 @@ def main():
         line_section = np.concatenate(
             (
                 np.linspace(0, X_dimension / 4, 5),
-                np.linspace(X_dimension / 4, X_dimension / 2, 10),
-                np.linspace(X_dimension / 2, 3 * X_dimension / 4, 10),
+                np.linspace(X_dimension / 4, X_dimension / 2, 5),
+                np.linspace(X_dimension / 2, 3 * X_dimension / 4, 5),
                 np.linspace(3 * X_dimension / 4, X_dimension, 5)
             ), axis=0)
+        line_section = np.unique(line_section)  # Remove duplicates
         
         # Draw sector lines
         for i, line_x in enumerate(line_section):

@@ -41,7 +41,7 @@ while True:
    
 
 
-    lower_bright_red = np.array([0, 0, 120])  # More relaxed on red detection  
+    lower_bright_red = np.array([0, 0, 100])  # More relaxed on red detection  
     upper_bright_red = np.array([120, 120, 255])  # Allow broader variations in B & G  
 
     mask_red = cv2.inRange(frame, lower_bright_red, upper_bright_red)
