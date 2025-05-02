@@ -1,9 +1,9 @@
 import numpy as np
-from detect_ir import detect_hotspots
-
+from detect_ir import HotspotDetector
 from pyproj import Transformer
-
-class PathGenerator:
+import cv2
+from mpi import MissionPlannerInterface
+class CoordinateTransformer:
     def __init__(self):
         self.transformer = None
         self.inverse_transformer = None
@@ -18,15 +18,11 @@ class PathGenerator:
 
     def generate_path(self, target_position, path_relative = []):
         """
-        Generate a snake-like path relative to the target position and return GPS waypoints.
         target_position: (latitude, longitude)
         Returns: list of (lat, lon) tuples
         """
         lat0, lon0 = target_position
         self.init_transformer(lat0, lon0)
-
-        # Example snake-like path in meters, relative to the target (0,0)
-       
 
         path_gps = []
         for x, y in path_relative:
@@ -37,27 +33,36 @@ class PathGenerator:
 
 
 class UAV_GROUND_PERCEPTION:
-    def __init__(chunk_size = self,radius = 100,position = (0,0),initial_target = (0,0)):
-        #self.map = np.zeros((self.WIDTH,self.HEIGHT,1), dtype=np.uint8)# map of the restricted airspace discretized in chuncks (x,y,IsRelevant)
-        #self.visited_chunks = set()
-        #self.chunk_size = chunk_size
-        #.surrounding_chunks = []
-        #self.targets = {hotspots:[], balloons:initial_target}
+    def __init__(self,radius = 100,position = (0,0),initial_target = (0,0),fov = 60):
         self.search_radius = radius # search radius for the UAV to search for targets
         self.position = position
+        self.altitude = 0. # altitude of the UAV
         self.vison_output = []
         self.alpha = 0.
+        self.fov = fov # field of view of the camera
         self.path_state = 0
         self.path = self.generate_path(initial_target)
         self.current_active_target = self.path[0]
         self.Bounds = [] # TODO: define the bounds of the search area
+        self.Ir_detector = HotspotDetector(camera_index= 4) #change cameraindex until it works ig.
+        self.MPI = MissionPlannerInterface() # TODO: define the mission planner interface
 
-        
-    def Is_OOB():
+    def are_within_range(tuple1, tuple2, tolerance=0.0001):
+        lat1, lon1 = tuple1
+        lat2, lon2 = tuple2
+    
+        # Check if the absolute difference between latitudes and longitudes is within tolerance
+        lat_diff = abs(lat1 - lat2)
+        lon_diff = abs(lon1 - lon2)
+    
+        return lat_diff <= tolerance and lon_diff <= tolerance
+    
+
+    def Is_OOB():#TODO: define the function to check if a position is out of bounds
         pass
     def generate_path(self, target_position):
-        path_gen = PathGenerator()
-        path_relative = [
+        path_gen = CoordinateTransformer()
+        path_relative = np.array([
             (-self.search_radius, -self.search_radius), #TODO:hardcode this fing path.
             (5, 0),
             (5, 5),
@@ -68,28 +73,65 @@ class UAV_GROUND_PERCEPTION:
             (5, 10),
             (5, 15),
             (0, 15),
-        ]
+        ])
         path = path_gen.generate_path(target_position, path_relative)
         return path
     
     def CV_GetVisionOutput(self):
-        # This function should return the vision output from the camera, like the whole unprocessed image. processing is done hereby ir_detector.py class
-        return None
-
+        frame = self.Ir_detector.return_valid_frame()
+        return frame
+    
+    def Mission_Planner_Get_Uav_Position(self):
+        return self.MPI.get_data('GPS')  # Assuming 'GPS' is the key for position data
     def update(self):
+        new_position = self.Mission_Planner_Get_Uav_Position()
+        new_altitude = self.MPI.get_data('ALT')  # Assuming 'ALT' is the key for altitude data
+        if new_position is not None and new_altitude is not None:
+            self.position = new_position
+            self.altitude = new_altitude
 
-        if self.path_state < len(self.path):
-            if self.position == self.current_active_target:
-                self.vision_output.append(self.CV_GetVisionOutput())
-                self.path_state += 1
-                if self.path_state < len(self.path):
-                    self.current_active_target = self.path[self.path_state]
-                    return 0
+            if self.path_state < len(self.path):
+                if self.are_within_range(self.position, self.current_active_target):
+                    self.vision_output.append((self.CV_GetVisionOutput(),self.altitude,self.position))
+                    self.path_state += 1
+                    if self.path_state < len(self.path):
+                        self.current_active_target = self.path[self.path_state]
+                        return 0
+                else:
+                    if self.path_state < len(self.path):
+                        self.current_active_target = self.path[self.path_state]
             else:
-                if self.path_state < len(self.path):
-                    self.current_active_target = self.path[self.path_state]
+                return -1  # Path completed
         else:
-            return -1  # Path completed
+            print("No new position data available.")
+            return -2  # Error in getting position data
+        
+    def post_process(self):
+        """
+        Post-process the vision output to extract relevant information.
+        """
+        hotspot_locations= []
+
+        for frame, alt, pos in self.vision_output:
+            p, c, t = self.Ir_detector.detect_hotspots(frame)
+            X_dimension, Y_dimension, _ = frame.shape
+            for contour, alt, pos in c:
+                x, y, w, h = cv2.boundingRect(contour)
+                chunk_length_half = alt* np.tan(np.radians(self.fov/2)) # TODO: check if this is correct#
+
+                coordinate_transformer = CoordinateTransformer()
+                coordinate_transformer.init_transformer(pos[0], pos[1])
+                x_distance = (x - X_dimension / 2) * chunk_length_half / X_dimension
+                y_distance = (y - Y_dimension / 2) * chunk_length_half / Y_dimension
+                lon, lat = coordinate_transformer.inverse_transformer.transform(x_distance, y_distance)
+                hotspot_locations.append((lat, lon))
+        # Get frame dimensions
+
+        return hotspot_locations
+
+    
+        
+        # Label detected hotspots with their sector
 
 def main():
     """
@@ -99,7 +141,18 @@ def main():
     uav_perception = UAV_GROUND_PERCEPTION(chunk_size=10, Width=640, Height=480, position=(0, 0), initial_target=(0, 0))
 
     # Update the UAV perception system
-    uav_perception.update()
+    while True:
+        if uav_perception.update() == -1:
+            break
+        if uav_perception.update() == -2:
+            print("Error in getting position data.")
+
+    uav_perception.post_process()
+    while True:
+        # Process the vision output
+        # Check for exit condition (e.g., key press)
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
 
     # Print the current position and vision output
     print("Current Position:", uav_perception.position)
