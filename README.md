@@ -9,3 +9,6 @@
 - main.py or detect_ir.py ZMQ to send stream of sector information to Intermediary.py
 - intermediary.py uses TCP sockets to communicate to Lua script(subscriber.lua)
 - why? because.
+# UPDATE 5/01/2025
+- Main thing is in Finder.py
+- depends on detect_it.py, mpi.py
