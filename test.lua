@@ -1,3 +1,7 @@
+---@diagnostic disable
+-- https://mavlink.io/en/messages/ardupilotmega.htmL
+
+
 -- publisher.lua
 local socket = require("socket")
 local server = assert(socket.bind("*", 12345))
@@ -6,10 +10,18 @@ server:settimeout(0)  -- non-blocking server
 print("Lua TCP publisher running on port 12345...")
 
 local clients = {}
-
+local attributes = {position=nil, altitude=nil, targetPosition=nil} -- whatever we need
 -- Simulate attribute:value data generation
+local function update_attributes()
+    --TODO:implement
+end
 local function generate_data()
-    return "speed:34,temp:76,time:" .. os.time() .. "\n"
+    local messager = ""
+    for k, v in pairs(attributes) do
+        messager = messager .. k .. ":" .. tostring(v) .. "," 
+    end
+    messager = messager .. "\n"  -- add \n
+    return messager
 end
 
 while true do

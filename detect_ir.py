@@ -84,7 +84,7 @@ class HotspotDetector:
     
     def validate_frame(self, frame): #check if the signal was good or something
        
-       if isall_blue(frame) or is_all_black(frame) or is_static_noise(frame):
+       if self.isall_blue(frame) or self.is_all_black(frame) or self.is_static_noise(frame):
             print("Error: Frame is all blue, black, or static noise.")
             return False
        
@@ -96,7 +96,7 @@ class HotspotDetector:
         Returns a valid frame from the camera.
         """
         frame = self.return_frame()
-        if validate_frame(frame):
+        if self.validate_frame(frame):
             return frame
         else:
             print("Error: Invalid frame.")
