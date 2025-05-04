@@ -74,7 +74,6 @@ while True:
             print("was unable to get position or altitude")
             continue
         position = position.split(',')
-        print("UAV on target")
         frame = detect_ir_instance.return_valid_frame()
         if frame is None:
             print("No valid frame available yet.")
@@ -91,7 +90,6 @@ for frame in vision_output:
     contours.append(c)
 
 while True:
-    frame_number = (frame_number + 1)
     if frame_number == len(vision_output):
         break
     # Process the vision output
@@ -99,7 +97,9 @@ while True:
     # Check for exit condition (e.g., key press)
     cv2.imshow(f"Vision Output {vision_output[frame_number][1]},{vision_output[frame_number][2]}", vision_output[frame_number][0])
 
-hotspot_locations= []
+    frame_number = (frame_number + 1)
+
+hotspot_locations= set()
 fov = 30
 for frame, alt, pos in vision_output:
     p, c, t = detect_ir_instance.detect_hotspots(frame)
@@ -113,7 +113,7 @@ for frame, alt, pos in vision_output:
         x_distance = (x - X_dimension / 2) * chunk_length_half / X_dimension
         y_distance = (y - Y_dimension / 2) * chunk_length_half / Y_dimension
         lon, lat = coordinate_transformer.inverse_transformer.transform(x_distance, y_distance)
-        hotspot_locations.append((lat, lon))
+        hotspot_locations.add((lat, lon))
 
 print(hotspot_locations)
 

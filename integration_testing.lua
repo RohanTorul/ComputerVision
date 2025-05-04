@@ -9,7 +9,7 @@ function pub:update_attributes()
     else
         pub.attributes["STAT"] = -1
     end
-    pub.attributes["POS"] = string.format("%f,%f",math.random()*100,math.random()*100)
+    pub.attributes["POS"] = string.format("%f,%f",math.random()+50,math.random()+110)
     pub.attributes["ALT"] = math.random(20,25) -- random altitude
 end
 while true do
