@@ -145,9 +145,11 @@ def main():
             print("UAV not on target")
 
     uav_perception.post_process()
+    
     while True:
         # Process the vision output
         # Check for exit condition (e.g., key press)
+        cv2
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
 
