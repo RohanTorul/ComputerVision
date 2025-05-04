@@ -15,9 +15,9 @@
 
 # UPDATE 05/03/2025
 - Finder.py
-- - depends on
-  - - mpi.py
+  - depends on
+    - mpi.py
     - detect_ir.py
 - main.lua
-- - depends on
-  - Publisher.lua
+  - depends on
+    - Publisher.lua
