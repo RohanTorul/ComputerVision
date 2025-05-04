@@ -16,7 +16,7 @@ class HotspotDetector:
         socketaddr = f"tcp://localhost:{coms_port}"
         self.socket.bind(socketaddr)  # Bind to a port
 
-    def detect_hotspots(frame, threshold=100, max_threshold=255):
+    def detect_hotspots(self,frame, threshold=100, max_threshold=255):
         """
         Detects hotspots in an IR frame by applying thresholding and contour detection.
         """
@@ -56,17 +56,17 @@ class HotspotDetector:
             return None
         return frame
 
-    def is_all_blue(frame, tolerance=10):
+    def is_all_blue(self,frame, tolerance=10):
         # Check if pixels are close to pure blue (255, 0, 0)
         blue = np.array([255, 0, 0])
         diff = np.abs(frame.astype(int) - blue)
         mask = np.all(diff <= tolerance, axis=2)
         return np.mean(mask) > 0.98  # More than 98% pixels are blue
 
-    def is_all_black(frame, threshold=10):
+    def is_all_black(self,frame, threshold=10):
         return np.mean(frame) < threshold
 
-    def is_static_noise(frame, tolerance=0.1):
+    def is_static_noise(self,frame, tolerance=0.1):
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         unique, counts = np.unique(gray, return_counts=True)
         pixel_counts = dict(zip(unique, counts))
@@ -84,7 +84,7 @@ class HotspotDetector:
     
     def validate_frame(self, frame): #check if the signal was good or something
        
-       if self.isall_blue(frame) or self.is_all_black(frame) or self.is_static_noise(frame):
+       if self.is_all_blue(frame) or self.is_all_black(frame) or self.is_static_noise(frame):
             print("Error: Frame is all blue, black, or static noise.")
             return False
        

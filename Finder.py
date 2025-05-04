@@ -88,6 +88,9 @@ class UAV_GROUND_PERCEPTION:
 
     def update(self):
         status = int(self.MPI.get_data('STAT'))
+        if status is None:
+            print("No data available yet.")
+            return -4
         if status == 0:
             print("UAV not on target")
             return -3
@@ -96,9 +99,17 @@ class UAV_GROUND_PERCEPTION:
             return -1
         elif status == 1:
             self.altitude = self.MPI.get_data('ALT')  # Assuming 'ALT' is the key for altitude data
-            self.position = self.MPI.get_data('POS').split(",")  # Assuming 'POS' is the key for position data
+            self.position = self.MPI.get_data('POS')  # Assuming 'POS' is the key for position data
+            if self.position is None or self.altitude is None:
+                print("was unable to get position or altitude")
+                return -5
+            self.position = self.position.split(',')
             print("UAV on target")
-            self.vision_output.append((self.CV_GetVisionOutput(),self.altitude,(float(self.position[0]),float(self.position[1]))))
+            frame = self.CV_GetVisionOutput()
+            if frame is None:
+                print("No valid frame available yet.")
+                return -6
+            self.vision_output.append((frame,self.altitude,(float(self.position[0]),float(self.position[1]))))
             return 0
 
         
@@ -111,9 +122,9 @@ class UAV_GROUND_PERCEPTION:
         for frame, alt, pos in self.vision_output:
             p, c, t = self.Ir_detector.detect_hotspots(frame)
             X_dimension, Y_dimension, _ = frame.shape
-            for _,contour,_ in c:
+            for contour in c:
                 x, y, w, h = cv2.boundingRect(contour)
-                chunk_length_half = alt* np.tan(np.radians(self.fov/2)) # TODO: check if this is correct#
+                chunk_length_half = float(alt)* np.tan(np.radians(self.fov/2)) # TODO: check if this is correct#
 
                 coordinate_transformer = CoordinateTransformer()
                 coordinate_transformer.init_transformer(pos[0], pos[1])
@@ -145,13 +156,16 @@ def main():
             print("UAV not on target")
 
     uav_perception.post_process()
-    
+
+    frame_number = 0 
     while True:
+        frame_number = (frame_number + 1) % len(uav_perception.vision_output)
         # Process the vision output
         # Check for exit condition (e.g., key press)
-        cv2
+        cv2.imshow(f"Vision Output {uav_perception.vison_output[-1][1]},{uav_perception.vison_output[frame_number][2]}", uav_perception.vision_output[frame_number][0])
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
+        cv2.destroyAllWindows()
 
     # Print the current position and vision output
     print("Current Position:", uav_perception.position)

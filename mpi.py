@@ -13,12 +13,15 @@ class MissionPlannerInterface:
         self.socket.setblocking(False)
 
     def parse_line_to_dict(self,line):
-        print(f"Parsing line: {line}")  # Debugging line
+        print(f"Parsing line: {line[0:-1]}")  # Debugging line
         pairs = line.strip().split(';')  # Remove the last '\n' and split by ';'
+        print(f"Parsed pairs: {pairs}")
         if len(pairs) == 0:
             return {}
         else:
-            return {key: value for key, value in (pair.split(':') for pair in pairs)}
+            dict = {key: value for key, value in (pair.split(':') for pair in pairs)}
+            print(f"Dict: {dict}")
+            return dict
     
     def get_data(self,attribute):
         """
@@ -27,13 +30,22 @@ class MissionPlannerInterface:
         try:
             recieved_packet = self.socket.recv(1024).decode()  # Read a line from the socket
             print(f"Received packet: {recieved_packet}")  # Debugging line
-            packet_dict = self.parse_line_to_dict(recieved_packet)
+            packet_dict = self.parse_line_to_dict(recieved_packet[0:-1])
             if attribute in packet_dict:
                 return packet_dict[attribute]
             else:
                 return None
         except BlockingIOError:
-            print("No data available yet.")
+            #print("No data available yet.")
+            return None
+    def get_dict(self):
+        try:
+            recieved_packet = self.socket.recv(1024).decode()  # Read a line from the socket
+            print(f"Received packet: {recieved_packet}")  # Debugging line
+            packet_dict = self.parse_line_to_dict(recieved_packet[0:-1])
+            return packet_dict
+        except BlockingIOError:
+            #print("No data available yet.")
             return None
 
     # def get_uav_position(self):
