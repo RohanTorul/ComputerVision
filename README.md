@@ -21,3 +21,9 @@
 - main.lua
   - depends on
     - Publisher.lua
+
+# UPDATE 05/04/2025
+- Finder.py
+  - Now uses mission_planner_file_interface.py
+  - processes each frame instead of all at once.
+  - control+F "SEE HERE" to see what I changed

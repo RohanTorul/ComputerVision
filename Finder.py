@@ -3,6 +3,8 @@ from detect_ir import HotspotDetector
 from pyproj import Transformer
 import cv2
 from mpi import MissionPlannerInterface
+from mission_planner_file_interface import MissionPlannerFileParser
+import time
 class CoordinateTransformer:
     def __init__(self):
         self.transformer = None
@@ -33,7 +35,7 @@ class CoordinateTransformer:
 
 
 class UAV_GROUND_PERCEPTION:
-    def __init__(self,radius = 100,position = (0,0),initial_target = (0,0),fov = 60):
+    def __init__(self,radius = 100,position = (0,0),initial_target = (0,0),fov = 60,chunksFile = "",fireSourceFile = ""):
         self.search_radius = radius # search radius for the UAV to search for targets
         self.position = position
         self.altitude = 0. # altitude of the UAV
@@ -47,6 +49,18 @@ class UAV_GROUND_PERCEPTION:
         self.Ir_detector = HotspotDetector(camera_index= 4) #change cameraindex until it works ig.
         self.MPI = MissionPlannerInterface(port=5760) # TODO: define the mission planner interface
 
+        # FILE PARSER CODE HERE
+        self.MPFI_hotspot = MissionPlannerFileParser(chunksFile)
+        self.MPFI_sourse = MissionPlannerFileParser(fireSourceFile)
+        self.previous_chunk = ""
+        self.counter_threshold = 20 # wait time in seconds
+        self.fire_source_info = ""
+        self.is_above_chunk = False
+        self.counter = 0
+
+        self.hotspot_coordinates = []
+
+
     def are_within_range(tuple1, tuple2, tolerance=0.0001):
         lat1, lon1 = tuple1
         lat2, lon2 = tuple2
@@ -57,7 +71,7 @@ class UAV_GROUND_PERCEPTION:
     
         return lat_diff <= tolerance and lon_diff <= tolerance
     
-
+   
     def Is_OOB():#TODO: define the function to check if a position is out of bounds
         pass
     def generate_path(self, target_position):
@@ -86,20 +100,37 @@ class UAV_GROUND_PERCEPTION:
     
     # "STAT:1..;POS:(lat,lon);ALT:altitude;\n"
 
-    def update(self):
-        status = int(self.MPI.get_data('STAT'))
-        if status is None:
-            print("No data available yet.")
-            return -4
-        if status == 0:
-            print("UAV not on target")
+    def update(self): #SEE HERE
+        if self.fire_source_info == "":
+            is_fire_source_file_present = not self.MPFI_sourse.update_dict() == None
+            if is_fire_source_file_present:
+                self.fire_source_info = self.MPFI_sourse.update_dict()
+            else:
+                return -2
+        is_hotspot_file_present = not self.MPFI_hotspot.update_dict() == None
+        if not is_hotspot_file_present:
             return -3
-        elif status == -1:
-            print("UAV returning to base")
-            return -1
-        elif status == 1:
-            self.altitude = self.MPI.get_data('ALT')  # Assuming 'ALT' is the key for altitude data
-            self.position = self.MPI.get_data('POS')  # Assuming 'POS' is the key for position data
+        self.MPFI_hotspot.update_dict()
+        if "CHUNK" in self.MPFI_hotspot.dict.keys():
+            current_chunk = self.MPFI_hotspot.dict["CHUNK"]
+            if current_chunk == self.previous_chunk:
+                self.counter += 1
+                if self.counter >= self.counter_threshold:
+                    self.counter = 0
+                    self.is_above_chunk = True # because this means that we are hovering over the same chunk
+                else: return 1 #counting
+            else:
+                self.previous_chunk = current_chunk
+                self.counter = 0
+                self.is_above_chunk = False
+                return 2 #new chunk detected
+        else:
+            return -4
+        if self.is_above_chunk:
+            if "POS" not in self.MPFI_hotspot.dict.keys() or "ALT" not in self.MPFI_hotspot.dict.keys():
+                return -5
+            self.altitude = self.MPFI_hotspot.dict["ALT"]  # Assuming 'ALT' is the key for altitude data
+            self.position = self.MPFI_hotspot.dict["POS"]  # Assuming 'POS' is the key for position data
             if self.position is None or self.altitude is None:
                 print("was unable to get position or altitude")
                 return -5
@@ -109,10 +140,52 @@ class UAV_GROUND_PERCEPTION:
             if frame is None:
                 print("No valid frame available yet.")
                 return -6
-            self.vision_output.append((frame,self.altitude,(float(self.position[0]),float(self.position[1]))))
-            return 0
+            self.vison_output.append((frame, self.altitude, (self.position[0], self.position[1])))
+            self.hotspot_coordinates.append(self.process_single_frame(self.vison_output[-1]))
+            return 3
 
-        
+        # status = int(self.MPI.get_data('STAT'))
+        # if status is None:
+        #     print("No data available yet.")
+        #     return -4
+        # if status == 0:
+        #     print("UAV not on target")
+        #     return -3
+        # elif status == -1:
+        #     print("UAV returning to base")
+        #     return -1
+        # elif status == 1:
+        #     self.altitude = self.MPI.get_data('ALT')  # Assuming 'ALT' is the key for altitude data
+        #     self.position = self.MPI.get_data('POS')  # Assuming 'POS' is the key for position data
+        #     if self.position is None or self.altitude is None:
+        #         print("was unable to get position or altitude")
+        #         return -5
+        #     self.position = self.position.split(',')
+        #     print("UAV on target")
+        #     frame = self.CV_GetVisionOutput()
+        #     if frame is None:
+        #         print("No valid frame available yet.")
+        #         return -6
+        #     self.vision_output.append((frame,self.altitude,(float(self.position[0]),float(self.position[1]))))
+        #     return 0
+
+    def process_single_frame(self, composite_frame): #SEE HERE
+        frame, alt, pos = composite_frame
+        hotspot_location = (0.,0.)
+        p,c,t = self.Ir_detector.detect_hotspots(frame)
+        X_dimension, Y_dimension, _ = frame.shape
+        for contour in c:
+            x, y, w, h = cv2.boundingRect(contour)
+            chunk_length_half = float(alt)* np.tan(np.radians(self.fov/2)) # TODO: check if this is correct#
+            coordinate_transformer = CoordinateTransformer()
+            coordinate_transformer.init_transformer(pos[0], pos[1])
+            x_distance = (x - X_dimension / 2) * chunk_length_half / X_dimension
+            y_distance = (y - Y_dimension / 2) * chunk_length_half / Y_dimension
+            lon, lat = coordinate_transformer.inverse_transformer.transform(x_distance, y_distance)
+            hotspot_location = (lat, lon)
+
+        return hotspot_location
+
     def post_process(self):
         """
         Post-process the vision output to extract relevant information.
@@ -145,7 +218,7 @@ def main():
     Main function to run the UAV_GROUND_PERCEPTION class.
     """
     # Initialize the UAV_GROUND_PERCEPTION class
-    uav_perception = UAV_GROUND_PERCEPTION(radius=100, position=(0, 0), initial_target=(0, 0), fov=60)
+    uav_perception = UAV_GROUND_PERCEPTION(radius=100, position=(0, 0), initial_target=(0, 0), fov=60, chunksFile="", fireSourceFile="") # SEE HERE
 
     # Update the UAV perception system
     while True:
