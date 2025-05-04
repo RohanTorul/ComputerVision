@@ -1,3 +1,5 @@
+# IMPORTANT: MODIFY WSL CONFIG FILE IF THEY CANNOT CONNECT
+# WSL: /etc/wsl.conf
 import socket
 class MissionPlannerInterface:
     """
@@ -11,7 +13,7 @@ class MissionPlannerInterface:
         self.socket.setblocking(False)
 
     def parse_line_to_dict(line):
-        pairs = line.strip().split(',')
+        pairs = line.strip().split(';')
         return {key: value for key, value in (pair.split(':') for pair in pairs)}
     
     def get_data(self,attribute):

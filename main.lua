@@ -23,6 +23,22 @@ local boundaries = {
   },
 }
 
+-- Modified by Rohan
+local Publisher = require("publisher")
+local pub = Publisher:new(5760, {["STAT"]=nil,["POS"]=nil, ["ALT"]=nil}) -- whatever we need
+
+function pub:update_attributes()
+    -- Update the attributes with the current values
+    local pos = ahrd:get_position()
+    pos = string.format("%f,%f", pos:lat(), pos:lng())
+    local alt = AP_Baro:get_altitude()
+    alt = string.format("%f", alt)
+    self.attributes["POS"] = pos
+    self.attributes["ALT"] = alt
+    end
+end
+-- end of my additions
+
 local MODE_GUIDED = 4
 local MODE_ALTHOLD = 2
 local MODE_LOITER = 5
@@ -248,6 +264,19 @@ local function readyToArm()
   end
 
 function update()
+    --Modified by Rohan
+    if stage == 5 then
+      pub:attributes["STAT"] = 1 -- UAV on target
+      pub:update_attributes()
+    else
+      pub:attributes["STAT"] = -1 -- UAV not on target yet
+      pub:attributes["POS"] = nil -- UAV not on target yet
+      pub:attributes["ALT"] = nil -- UAV not on target yet
+    end
+    pub:step() -- update the publisher
+    gcs:send_text(6, "Publisher running...")
+    -- end of my additions
+
     local now = millis()
     local pos = ahrs:get_relative_position_NED_home()
 
@@ -405,6 +434,8 @@ function update()
         return update, 200
       end
     end
+    -- send sigal to take a pic
+    
 
     -- Stage 6: Go to home coordinates 50.0973425,-110.7352315
     if stage == 6 then

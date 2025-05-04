@@ -45,7 +45,7 @@ class UAV_GROUND_PERCEPTION:
         self.current_active_target = self.path[0]
         self.Bounds = [] # TODO: define the bounds of the search area
         self.Ir_detector = HotspotDetector(camera_index= 4) #change cameraindex until it works ig.
-        self.MPI = MissionPlannerInterface() # TODO: define the mission planner interface
+        self.MPI = MissionPlannerInterface(port=5760) # TODO: define the mission planner interface
 
     def are_within_range(tuple1, tuple2, tolerance=0.0001):
         lat1, lon1 = tuple1
@@ -83,8 +83,11 @@ class UAV_GROUND_PERCEPTION:
     
     def Mission_Planner_Get_Uav_Position(self):
         return self.MPI.get_data('GPS')  # Assuming 'GPS' is the key for position data
+    
+    # "STAT:1..;POS:(lat,lon);ALT:altitude;\n"
+
     def update(self):
-        status = int(self.MPT.get_data('STAT'))
+        status = int(self.MPI.get_data('STAT'))
         if status == 0:
             print("UAV not on target")
             return -3
@@ -93,32 +96,11 @@ class UAV_GROUND_PERCEPTION:
             return -1
         elif status == 1:
             self.altitude = self.MPI.get_data('ALT')  # Assuming 'ALT' is the key for altitude data
-            self.position = float(self.MPI.get_data('POS'))  # Assuming 'POS' is the key for position data
+            self.position = self.MPI.get_data('POS').split(",")  # Assuming 'POS' is the key for position data
             print("UAV on target")
             self.vision_output.append((self.CV_GetVisionOutput(),self.altitude,(float(self.position[0]),float(self.position[1]))))
             return 0
-    
-        # new_position = self.Mission_Planner_Get_Uav_Position()
-        # new_altitude = self.MPI.get_data('ALT')  # Assuming 'ALT' is the key for altitude data
-        # if new_position is not None and new_altitude is not None:
-        #     self.position = new_position
-        #     self.altitude = new_altitude
 
-        #     if self.path_state < len(self.path):
-        #         if self.are_within_range(self.position, self.current_active_target):
-        #             self.vision_output.append((self.CV_GetVisionOutput(),self.altitude,self.position))
-        #             self.path_state += 1
-        #             if self.path_state < len(self.path):
-        #                 self.current_active_target = self.path[self.path_state]
-        #                 return 0
-        #         else:
-        #             if self.path_state < len(self.path):
-        #                 self.current_active_target = self.path[self.path_state]
-        #     else:
-        #         return -1  # Path completed
-        # else:
-        #     print("No new position data available.")
-        #     return -2  # Error in getting position data
         
     def post_process(self):
         """
@@ -152,7 +134,7 @@ def main():
     Main function to run the UAV_GROUND_PERCEPTION class.
     """
     # Initialize the UAV_GROUND_PERCEPTION class
-    uav_perception = UAV_GROUND_PERCEPTION(chunk_size=10, Width=640, Height=480, position=(0, 0), initial_target=(0, 0))
+    uav_perception = UAV_GROUND_PERCEPTION(radius=100, position=(0, 0), initial_target=(0, 0), fov=60)
 
     # Update the UAV perception system
     while True:
