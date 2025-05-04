@@ -155,17 +155,29 @@ def main():
         if uav_perception.update() == -3:
             print("UAV not on target")
 
-    uav_perception.post_process()
+    print("Hotspot locations:",uav_perception.post_process())
+
+    contours = []
+    for frame in uav_perception.vision_output:
+        _,c,_ = uav_perception.Ir_detector.detect_hotspots(frame[0])
+        
+        contours.append(c)
+
 
     frame_number = 0 
     while True:
-        frame_number = (frame_number + 1) % len(uav_perception.vision_output)
+        frame_number = (frame_number + 1)
+        if frame_number == len(uav_perception.vision_output):
+            break
         # Process the vision output
+        cv2.drawContours(uav_perception.vision_output[frame_number][0], contours[frame_number], -1, (0, 0, 255), 2)
         # Check for exit condition (e.g., key press)
         cv2.imshow(f"Vision Output {uav_perception.vison_output[-1][1]},{uav_perception.vison_output[frame_number][2]}", uav_perception.vision_output[frame_number][0])
+    
+    while True:
         if cv2.waitKey(1) & 0xFF == ord('q'):
+            cv2.destroyAllWindows()
             break
-        cv2.destroyAllWindows()
 
     # Print the current position and vision output
     print("Current Position:", uav_perception.position)
