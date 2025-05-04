@@ -12,16 +12,21 @@ class MissionPlannerInterface:
         self.socket.connect(('localhost', port))  # New port for socket subscriber
         self.socket.setblocking(False)
 
-    def parse_line_to_dict(line):
-        pairs = line.strip().split(';')
-        return {key: value for key, value in (pair.split(':') for pair in pairs)}
+    def parse_line_to_dict(self,line):
+        print(f"Parsing line: {line}")  # Debugging line
+        pairs = line.strip().split(';')  # Remove the last '\n' and split by ';'
+        if len(pairs) == 0:
+            return {}
+        else:
+            return {key: value for key, value in (pair.split(':') for pair in pairs)}
     
     def get_data(self,attribute):
         """
         Get the data from the Mission Planner.
         """
         try:
-            recieved_packet = self.socket.recv(1024).decode()
+            recieved_packet = self.socket.recv(1024).decode()  # Read a line from the socket
+            print(f"Received packet: {recieved_packet}")  # Debugging line
             packet_dict = self.parse_line_to_dict(recieved_packet)
             if attribute in packet_dict:
                 return packet_dict[attribute]

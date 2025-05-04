@@ -31,7 +31,7 @@ function pub:update_attributes()
     -- Update the attributes with the current values
     local pos = ahrd:get_position()
     pos = string.format("%f,%f", pos:lat(), pos:lng())
-    local alt = AP_Baro:get_altitude()
+    local alt = baro:get_altitude() -- idk what the object is, baro or AP_Baro
     alt = string.format("%f", alt)
     self.attributes["POS"] = pos
     self.attributes["ALT"] = alt

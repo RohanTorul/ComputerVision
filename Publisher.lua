@@ -10,6 +10,7 @@ function Publisher:new(port, attributes)
     self.clients = {}
     self.attributes = attributes
     print("Lua TCP publisher running on port " .. self.port .. "...")
+    return self
 end
 
 function Publisher:update_attributes()
@@ -19,9 +20,9 @@ end
 function Publisher:generate_data() -- format: "key1;value1,key2;value2,...\n"
     local message = ""
     for k, v in pairs(self.attributes) do
-        message = message .. k .. ";" .. tostring(v) .. ";" 
+        message = message .. k .. ":" .. tostring(v) .. ";" 
     end
-    message = message .. "\n"  -- add \n
+    message = string.sub(message,1,-2) .. "\n"  -- add \n
     return message
 end
 function Publisher:step()
@@ -35,10 +36,11 @@ function Publisher:step()
     -- Broadcast data to all connected clients
     --self:update_attributes()  -- update attributes before sending CALLED MANUALLY NOW
     local data = self:generate_data()
-
+   
 
     for i = #self.clients, 1, -1 do
         local c = self.clients[i]
+        print("Sending data: " .. data)
         local success, err = c:send(data)
         if not success then
             print("Client disconnected:", err)
@@ -51,6 +53,8 @@ end
 function Publisher:run()
     while true do
         self:step()
-        socket.sleep(0.1)  -- send every 0.2 second
+        --socket.sleep(0.1)  -- send every 0.2 second
     end
 end
+
+return Publisher
