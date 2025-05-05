@@ -120,7 +120,8 @@ class UAV_GROUND_PERCEPTION:
                         if frame is None:
                          print("No valid frame available yet.")
                          return -6
-                        self.position = (str(float(self.position[0])/10000000), str(float(self.position[1])/10000000))
+                        #self.position = (str(float(self.position[0])/10000000), str(float(self.position[1])/10000000))
+                    
                         self.vision_output.append((frame, self.altitude, (self.position[0], self.position[1])))
                         self.hotspot_coordinates.append(self.process_single_frame(self.vision_output[-1]))
                     else:
