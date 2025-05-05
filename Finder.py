@@ -36,10 +36,10 @@ class CoordinateTransformer:
 
 class UAV_GROUND_PERCEPTION:
     def __init__(self,radius = 100,position = (0,0),initial_target = (0,0),fov = 60,chunksFile = "",fireSourceFile = ""):
-        self.search_radius = radius # search radius for the UAV to search for targets
+        self.search_radius = radius # search radius for the Valkie to search for targets
         self.position = position
-        self.altitude = 0. # altitude of the UAV
-        self.vison_output = []
+        self.altitude = 0. # altitude of the Valkie
+        self.vision_output = []
         self.alpha = 0.
         self.fov = fov # field of view of the camera
         self.path_state = 0
@@ -48,6 +48,7 @@ class UAV_GROUND_PERCEPTION:
         self.Bounds = [] # TODO: define the bounds of the search area
         self.Ir_detector = HotspotDetector(camera_index= 4) #change cameraindex until it works ig.
         self.MPI = MissionPlannerInterface(port=5760) # TODO: define the mission planner interface
+        self.previous_STAT = ""
 
         # FILE PARSER CODE HERE
         self.MPFI_hotspot = MissionPlannerFileParser(chunksFile)
@@ -101,58 +102,90 @@ class UAV_GROUND_PERCEPTION:
     # "STAT:1..;POS:(lat,lon);ALT:altitude;\n"
 
     def update(self): #SEE HERE
-        if self.fire_source_info == "":
-            is_fire_source_file_present = not self.MPFI_sourse.update_dict() == None
-            if is_fire_source_file_present:
-                self.fire_source_info = self.MPFI_sourse.update_dict()
+        self.MPI.mavlink_step()
+        dict = self.MPI.mavlink_dict
+        if dict:
+            current_STAT = dict["STAT"] if "STAT" in dict.keys() else self.previous_STAT
+            print("current_STAT: ",current_STAT)
+            if current_STAT != self.previous_STAT:
+                self.previous_STAT = current_STAT
+                if current_STAT == "0":
+                    return -4
+                elif current_STAT == "1":
+                    self.altitude = dict["ALT"] if "ALT" in dict.keys() else None
+                    self.position = dict["POS"] if "POS" in dict.keys() else None
+                    if self.position and self.altitude:
+                        self.position = self.position.split(',')
+                        frame = self.CV_GetVisionOutput()
+                        if frame is None:
+                         print("No valid frame available yet.")
+                         return -6
+                        self.position = (str(float(self.position[0])/10000000), str(float(self.position[1])/10000000))
+                        self.vision_output.append((frame, self.altitude, (self.position[0], self.position[1])))
+                        self.hotspot_coordinates.append(self.process_single_frame(self.vision_output[-1]))
+                    else:
+                        return -5
+                elif current_STAT == "X":
+                    return -1
             else:
-                return -2
-        is_hotspot_file_present = not self.MPFI_hotspot.update_dict() == None
-        if not is_hotspot_file_present:
-            return -3
-        self.MPFI_hotspot.update_dict()
-        if "CHUNK" in self.MPFI_hotspot.dict.keys():
-            current_chunk = self.MPFI_hotspot.dict["CHUNK"]
-            if current_chunk == self.previous_chunk:
-                self.counter += 1
-                if self.counter >= self.counter_threshold:
-                    self.counter = 0
-                    self.is_above_chunk = True # because this means that we are hovering over the same chunk
-                else: return 1 #counting
-            else:
-                self.previous_chunk = current_chunk
-                self.counter = 0
-                self.is_above_chunk = False
-                return 2 #new chunk detected
+                if current_STAT == "1" or current_STAT == "X":
+                    return -3
+                else:
+                    return -4
         else:
-            return -4
-        if self.is_above_chunk:
-            if "POS" not in self.MPFI_hotspot.dict.keys() or "ALT" not in self.MPFI_hotspot.dict.keys():
-                return -5
-            self.altitude = self.MPFI_hotspot.dict["ALT"]  # Assuming 'ALT' is the key for altitude data
-            self.position = self.MPFI_hotspot.dict["POS"]  # Assuming 'POS' is the key for position data
-            if self.position is None or self.altitude is None:
-                print("was unable to get position or altitude")
-                return -5
-            self.position = self.position.split(',')
-            print("UAV on target")
-            frame = self.CV_GetVisionOutput()
-            if frame is None:
-                print("No valid frame available yet.")
-                return -6
-            self.vison_output.append((frame, self.altitude, (self.position[0], self.position[1])))
-            self.hotspot_coordinates.append(self.process_single_frame(self.vison_output[-1]))
-            return 3
+            return -2
+        # if self.fire_source_info == "":
+        #     is_fire_source_file_present = not self.MPFI_sourse.update_dict() == None
+        #     if is_fire_source_file_present:
+        #         self.fire_source_info = self.MPFI_sourse.update_dict()
+        #     else:
+        #         return -2
+        # is_hotspot_file_present = not self.MPFI_hotspot.update_dict() == None
+        # if not is_hotspot_file_present:
+        #     return -3
+        # self.MPFI_hotspot.update_dict()
+        # if "CHUNK" in self.MPFI_hotspot.dict.keys():
+        #     current_chunk = self.MPFI_hotspot.dict["CHUNK"]
+        #     if current_chunk == self.previous_chunk:
+        #         self.counter += 1
+        #         if self.counter >= self.counter_threshold:
+        #             self.counter = 0
+        #             self.is_above_chunk = True # because this means that we are hovering over the same chunk
+        #         else: return 1 #counting
+        #     else:
+        #         self.previous_chunk = current_chunk
+        #         self.counter = 0
+        #         self.is_above_chunk = False
+        #         return 2 #new chunk detected
+        # else:
+        #     return -4
+        # if self.is_above_chunk:
+        #     if "POS" not in self.MPFI_hotspot.dict.keys() or "ALT" not in self.MPFI_hotspot.dict.keys():
+        #         return -5
+        #     self.altitude = self.MPFI_hotspot.dict["ALT"]  # Assuming 'ALT' is the key for altitude data
+        #     self.position = self.MPFI_hotspot.dict["POS"]  # Assuming 'POS' is the key for position data
+        #     if self.position is None or self.altitude is None:
+        #         print("was unable to get position or altitude")
+        #         return -5
+        #     self.position = self.position.split(',')
+        #     print("Valkie on target")
+        #     frame = self.CV_GetVisionOutput()
+        #     if frame is None:
+        #         print("No valid frame available yet.")
+        #         return -6
+        #     self.vision_output.append((frame, self.altitude, (self.position[0], self.position[1])))
+        #     self.hotspot_coordinates.append(self.process_single_frame(self.vision_output[-1]))
+        #     return 3
 
         # status = int(self.MPI.get_data('STAT'))
         # if status is None:
         #     print("No data available yet.")
         #     return -4
         # if status == 0:
-        #     print("UAV not on target")
+        #     print("Valkie not on target")
         #     return -3
         # elif status == -1:
-        #     print("UAV returning to base")
+        #     print("Valkie returning to base")
         #     return -1
         # elif status == 1:
         #     self.altitude = self.MPI.get_data('ALT')  # Assuming 'ALT' is the key for altitude data
@@ -161,7 +194,7 @@ class UAV_GROUND_PERCEPTION:
         #         print("was unable to get position or altitude")
         #         return -5
         #     self.position = self.position.split(',')
-        #     print("UAV on target")
+        #     print("Valkie on target")
         #     frame = self.CV_GetVisionOutput()
         #     if frame is None:
         #         print("No valid frame available yet.")
@@ -178,7 +211,7 @@ class UAV_GROUND_PERCEPTION:
             x, y, w, h = cv2.boundingRect(contour)
             chunk_length_half = float(alt)* np.tan(np.radians(self.fov/2)) # TODO: check if this is correct#
             coordinate_transformer = CoordinateTransformer()
-            coordinate_transformer.init_transformer(pos[0], pos[1])
+            coordinate_transformer.init_transformer((pos[0]), pos[1])
             x_distance = (x - X_dimension / 2) * chunk_length_half / X_dimension
             y_distance = (y - Y_dimension / 2) * chunk_length_half / Y_dimension
             lon, lat = coordinate_transformer.inverse_transformer.transform(x_distance, y_distance)
@@ -220,13 +253,27 @@ def main():
     # Initialize the UAV_GROUND_PERCEPTION class
     uav_perception = UAV_GROUND_PERCEPTION(radius=100, position=(0, 0), initial_target=(0, 0), fov=60, chunksFile="", fireSourceFile="") # SEE HERE
 
-    # Update the UAV perception system
+    # Update the Valkie perception system
     while True:
-        if uav_perception.update() == -1:
-            print("UAV returning to base")
+        update_output = uav_perception.update()
+        if update_output == -1:
+            print("Valkie returning to base")
             break
-        if uav_perception.update() == -3:
-            print("UAV not on target")
+        if update_output == -2:
+            print("Dict not available")
+            continue
+        if update_output == -3:
+            print("Valkie is on the same target as before")
+            continue
+        if update_output == -4:
+            print("Valkie is moving to a target")
+            continue
+        if update_output == -5:
+            print("unable to get Valkie's position or altitude")
+            continue
+        if update_output == -6:
+            print("No valid frame available")
+            continue
 
     print("Hotspot locations:",uav_perception.post_process())
 
@@ -245,7 +292,7 @@ def main():
         # Process the vision output
         cv2.drawContours(uav_perception.vision_output[frame_number][0], contours[frame_number], -1, (0, 0, 255), 2)
         # Check for exit condition (e.g., key press)
-        cv2.imshow(f"Vision Output {uav_perception.vison_output[-1][1]},{uav_perception.vison_output[frame_number][2]}", uav_perception.vision_output[frame_number][0])
+        cv2.imshow(f"Vision Output {uav_perception.vision_output[-1][1]},{uav_perception.vision_output[frame_number][2]}", uav_perception.vision_output[frame_number][0])
     
     while True:
         if cv2.waitKey(1) & 0xFF == ord('q'):

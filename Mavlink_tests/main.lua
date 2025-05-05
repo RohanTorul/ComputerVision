@@ -23,15 +23,13 @@ local boundaries = {
   },
 }
 
-
-
 local MODE_GUIDED = 4
 local MODE_ALTHOLD = 2
 local MODE_LOITER = 5
 local MODE_LAND = 9
 
 local camera_angle = 29.79 -- degrees
-local target_length = 25 -- meters
+local target_length = 50 -- meters
 
 local target_alt = target_length/(2 * math.tan(camera_angle * math.pi/180)) -- 15m AGL at 29.79 degrees -> 17.28m altitude
 local hover_duration = 10000   -- ms to hover
@@ -65,7 +63,7 @@ local function flyTo(lat, lon, alt_m)
     -- 2) switch into GUIDED and send the waypoint
     vehicle:set_mode(MODE_GUIDED)
     vehicle:set_target_location(target_loc)
-    gcs:send_text(6, string.format("Going to %.6f, %.6f @ %.1fm", lat, lon, alt_m))
+    --gcs:send_text(6, string.format("Going to %.6f, %.6f @ %.1fm", lat, lon, alt_m))
 
     -- 3) start timer, advance sub‐state
     goto_start_ms = millis()
@@ -79,7 +77,7 @@ local function flyTo(lat, lon, alt_m)
     if pos then
       local d = pos:get_distance(target_loc) or 999
       if d < 0.5 then
-        gcs:send_text(6, "Arrived (dist="..string.format("%.2f",d).."m), hovering…")
+        --gcs:send_text(6, "Arrived (dist="..string.format("%.2f",d).."m), hovering…")
         -- vehicle:set_mode(MODE_ALTHOLD)
         goto_stage = 2
         return true
@@ -87,7 +85,7 @@ local function flyTo(lat, lon, alt_m)
     end
 
     if millis() - goto_start_ms > 300000 then
-      gcs:send_text(6, "Goto timeout, hovering anyway")
+      --gcs:send_text(6, "Goto timeout, hovering anyway")
       -- vehicle:set_mode(MODE_ALTHOLD)
       goto_stage = 2
       return true
@@ -109,7 +107,7 @@ end
 local function export_chunks_to_kml(filename)
   local fh, err = io.open(filename, "w")
   if not fh then
-    gcs:send_text(6, "KML export failed: "..(err or "unknown error"))
+    --gcs:send_text(6, "KML export failed: "..(err or "unknown error"))
     return
   end
 
@@ -138,7 +136,7 @@ local function export_chunks_to_kml(filename)
   fh:write('</kml>\n')
   fh:close()
 
-  gcs:send_text(6, "Exported KML to "..filename)
+  --gcs:send_text(6, "Exported KML to "..filename)
 end
 
 local function point_in_poly(lat, lon, poly)
@@ -224,25 +222,25 @@ end
 local function readyToArm()
     local gps_ok = gps:status(0)
     if not gps_ok then
-        gcs:send_text(6, "Waiting for GPS 3D fix...")
+        --gcs:send_text(6, "Waiting for GPS 3D fix...")
         return false
     end
 
     local ekf_ok = (ahrs:get_position() ~= nil)
     if not ekf_ok then
-        gcs:send_text(6, "Waiting for EKF position...")
+        --gcs:send_text(6, "Waiting for EKF position...")
         return false
     end
 
     local prearm_ok = ahrs:healthy()
     if not prearm_ok then
-        gcs:send_text(6, "Waiting for pre-arm checks...")
+        --gcs:send_text(6, "Waiting for pre-arm checks...")
         return false
     end
 
     local init_ok = ahrs:initialised()
     if not init_ok then
-        gcs:send_text(6, "Waiting for initialisation...")
+        --gcs:send_text(6, "Waiting for initialisation...")
         return false
     end
 
@@ -250,46 +248,48 @@ local function readyToArm()
   end
 
 function update()
-
-
     local now = millis()
     local pos = ahrs:get_relative_position_NED_home()
-
     -- Stage 0: Arm, wait for position + 3D fix, then takeoff
     if stage == 0 then
-      gcs:send_text(6, "Stage 0: Waiting for GPS, EKF and pre-arm checks...")
+      --gcs:send_text(6, "Stage 0: Waiting for GPS, EKF and pre-arm checks...")
+      gcs:send_text(6,string.format("STAT:0;ALT:%f;POS:%f,%f\n",0,0,0)) -- string.format("STAT:0;ALT:%f;POS:%f,%f\n", pos:z(), pos:lat(), pos:lng()))
+     
       if not arming:is_armed() then
         arming:arm()
         return update, 1000
       end
 
       if not readyToArm() then
-          gcs:send_text(6, "Waiting for GPS, EKF and pre-arm checks…")
+          --gcs:send_text(6, "Waiting for GPS, EKF and pre-arm checks…")
+          
           return update, 1000
         end
 
       initial_alt = -pos:z()
-      gcs:send_text(6, string.format("Armed. Initial Alt = %.1f m", initial_alt))
+      --gcs:send_text(6, string.format("Armed. Initial Alt = %.1f m", initial_alt))
 
       if vehicle:set_mode(MODE_GUIDED) and vehicle:start_takeoff(target_alt) then
-        gcs:send_text(6, "Takeoff started…")
+        --gcs:send_text(6, "Takeoff started…")
         stage = 1
       else
-        gcs:send_text(6, "Failed to start guided takeoff.")
+        --gcs:send_text(6, "Failed to start guided takeoff.")
       end
       return update, 1000
     end
 
     -- Stage 1: Wait for climb to complete (10m above initial)
     if stage == 1 then
-        gcs:send_text(6, "Stage 1: Climbing to target altitude...")
+        --gcs:send_text(6, "Stage 1: Climbing to target altitude...")
+        gcs:send_text(6,string.format("STAT:0;ALT:%f;POS:%f,%f\n",0,0,0)) -- string.format("STAT:0;ALT:%f;POS:%f,%f\n", pos:z(), pos:lat(), pos:lng()))
+     
         local pos = ahrs:get_relative_position_NED_home()
         if pos then
             local current_alt = -pos:z()
-            gcs:send_text(6, string.format("Ascending... Alt = %.2f / %.2f", current_alt, initial_alt + target_alt))
+            --gcs:send_text(6, string.format("Ascending... Alt = %.2f / %.2f", current_alt, initial_alt + target_alt))
 
             if current_alt >= initial_alt + target_alt - 0.5 then
-                gcs:send_text(6, "Reached target. Switching to ALTHOLD for holding altitude...")
+                --gcs:send_text(6, "Reached target. Switching to ALTHOLD for holding altitude...")
                 stage = 2
             end
         end
@@ -298,8 +298,10 @@ function update()
     
     -- Stage 2: switch back to GUIDED and move north at 2 m/s
     if stage == 2 then
-        gcs:send_text(6, "Stage 2: Switching to GUIDED and moving north...")
-        gcs:send_text(6, "Now moving north east at 2 m/s...")
+        --gcs:send_text(6, "Stage 2: Switching to GUIDED and moving north...")
+        --gcs:send_text(6, "Now moving north east at 2 m/s...")
+        gcs:send_text(6,string.format("STAT:0;ALT:%f;POS:%f,%f\n",0,0,0)) -- string.format("STAT:0;ALT:%f;POS:%f,%f\n", pos:z(), pos:lat(), pos:lng()))
+     
 
         local target_vel = Vector3f()
         target_vel:x( -2.0 )    -- 2 m/s toward geographic south
@@ -307,15 +309,15 @@ function update()
         target_vel:z( 0.0 )    -- hold altitude
 
         if vehicle:set_target_velocity_NED(target_vel) then
-          gcs:send_text(6, "Moving south west at 2 m/s")
+          --gcs:send_text(6, "Moving south west at 2 m/s")
         else
-          gcs:send_text(6, "Velocity command failed")
+          --gcs:send_text(6, "Velocity command failed")
         end
 
         -- wait for 10 seconds before switching to stage 3
         hover_start = millis()
         if now - hover_start > hover_duration then
-            gcs:send_text(6, "Reached target. Switching to LAND...")
+            --gcs:send_text(6, "Reached target. Switching to LAND...")
             stage = 3
         end
 
@@ -324,18 +326,20 @@ function update()
 
     -- Stage 3: go to this coordinate 50.101298, -110.738011
     if stage == 3 then
-        gcs:send_text(6, "Stage 3: Going to target coordinate...")
+        --gcs:send_text(6, "Stage 3: Going to target coordinate...")
+        gcs:send_text(6,string.format("STAT:0;ALT:%f;POS:%f,%f\n",0,0,0)) -- string.format("STAT:0;ALT:%f;POS:%f,%f\n", pos:z(), pos:lat(), pos:lng()))
+     
         local target_lat = 50.101298
         local target_lon = -110.738011
 
         if flyTo(target_lat, target_lon, target_alt) then
-            gcs:send_text(6, string.format("Arrived at %.6f, %.6f", target_lat, target_lon))
+            --gcs:send_text(6, string.format("Arrived at %.6f, %.6f", target_lat, target_lon))
             goto_stage = 0
             start_lat = target_lat
             start_lon = target_lon
             stage = 4
         else
-            gcs:send_text(6, "Failed to go to target.")
+            --gcs:send_text(6, "Failed to go to target.")
         end
 
         return update, 1000
@@ -373,7 +377,9 @@ function update()
       end
     
       -- finished generating
-      gcs:send_text(6, string.format("Survey: %d chunks to visit", #survey_points))
+      --gcs:send_text(6, string.format("Survey: %d chunks to visit", #survey_points))
+      gcs:send_text(6,string.format("STAT:0;ALT:%f;POS:%f,%f\n",0,0,0)) -- string.format("STAT:0;ALT:%f;POS:%f,%f\n", pos:z(), pos:lat(), pos:lng()))
+     
       export_chunks_to_kml("/survey_chunks.kml")
       stage = 5
       return update, 500
@@ -382,7 +388,7 @@ function update()
     -- Stage 5: fly to each chunk center in turn
     if stage == 5 then
       if survey_index > #survey_points then
-        gcs:send_text(6, "All chunks visited, landing…")
+        --gcs:send_text(6, "All chunks visited, landing…")
         stage = 6
         return update, 1000
       end
@@ -391,56 +397,64 @@ function update()
 
       -- fly to chunk center
       if survey_state == 0 then
-        gcs:send_text(6, string.format("Heading to chunk %d/%d", survey_index, #survey_points))
+        --gcs:send_text(6, string.format("Heading to chunk %d/%d", survey_index, #survey_points))
+        gcs:send_text(6,string.format("STAT:0;ALT:%f;POS:%f,%f\n",0,0,0))
         if flyTo(pt.lat, pt.lon, target_alt) then
           survey_hover_start = millis()
           survey_state = 1
-          gcs:send_text(6, string.format("Hovering chunk %d/%d", survey_index, #survey_points))
+          
+          --gcs:send_text(6, string.format("Hovering chunk %d/%d", survey_index, #survey_points))
+         -- string.format("Hovering chunk %d/%d", survey_index, #survey_points))
         end
         return update, 200
       end
 
       -- hover for 5s
       if survey_state == 1 then
+        local mypos = ahrs:get_position()
+        local myalt = baro:get_altitude()
+        gcs:send_text(6, string.format("STAT:1;ALT:%f;POS:%.1f,%.1f\n", myalt ,mypos:lat(), mypos:lng())) 
         if millis() - survey_hover_start >= 5000 then
           survey_index = survey_index + 1
           survey_state = 0
         end
         return update, 200
       end
+      
     end
-    -- send sigal to take a pic
-    
 
     -- Stage 6: Go to home coordinates 50.0973425,-110.7352315
     if stage == 6 then
-      gcs:send_text(6, "Stage 6: Going to target coordinate for landing...")
+      --gcs:send_text(6, "Stage 6: Going to target coordinate for landing...")
+      gcs:send_text(6,string.format("STAT:X;ALT:%f;POS:%f,%f\n",0,0,0)) 
       local target_lat = 50.0973425
       local target_lon = -110.7352315
 
       if flyTo(target_lat, target_lon, target_alt) then
-          gcs:send_text(6, string.format("Arrived at %.6f, %.6f", target_lat, target_lon))
+          --gcs:send_text(6, string.format("Arrived at %.6f, %.6f", target_lat, target_lon))
           goto_stage = 0
           stage = 7
       else
-          gcs:send_text(6, "Failed to go to target.")
+          --gcs:send_text(6, "Failed to go to target.")
       end
       return update, 1000
     end
 
     -- Stage 7: Land
     if stage == 7 then
-      gcs:send_text(6, "Stage 7: Landing...")
+      --gcs:send_text(6, "Stage 7: Landing...")
+      gcs:send_text(6,string.format("STAT:X;ALT:%f;POS:%f,%f\n",0,0,0))  -- string.format("STAT:0;ALT:%f;POS:%f,%f\n", pos:z(), pos:lat(), pos:lng()))
+     
       local pos = ahrs:get_relative_position_NED_home()
       if pos then
           local current_alt = -pos:z()
-          gcs:send_text(6, string.format("Descending... Alt = %.2f / %.2f", current_alt, target_alt))
+          --gcs:send_text(6, string.format("Descending... Alt = %.2f / %.2f", current_alt, target_alt))
 
           if current_alt <= target_alt + 0.5 then
-              gcs:send_text(6, "Reached target. Switching to LAND...")
+              --gcs:send_text(6, "Reached target. Switching to LAND...")
               vehicle:set_mode(MODE_LAND)
               if current_alt <= 0.5 then
-                  gcs:send_text(6, "Drone landed")
+                  --gcs:send_text(6, "Drone landed")
                   arming:disarm()
                   stage = 8
               end
