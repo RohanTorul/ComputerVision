@@ -398,7 +398,7 @@ function update()
       -- fly to chunk center
       if survey_state == 0 then
         --gcs:send_text(6, string.format("Heading to chunk %d/%d", survey_index, #survey_points))
-        gcs:send_text(6,string.format("STAT:0;ALT:%f;POS:%f,%f\n",0,0,0))
+        gcs:send_text(6,string.format("STAT:0;ALT:%f;POS:%f,%f\n",69,69,69))
         if flyTo(pt.lat, pt.lon, target_alt) then
           survey_hover_start = millis()
           survey_state = 1

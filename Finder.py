@@ -5,6 +5,7 @@ import cv2
 from mpi import MissionPlannerInterface
 from mission_planner_file_interface import MissionPlannerFileParser
 import time
+import simplekml
 class CoordinateTransformer:
     def __init__(self):
         self.transformer = None
@@ -35,7 +36,20 @@ class CoordinateTransformer:
 
 
 class UAV_GROUND_PERCEPTION:
-    def __init__(self,radius = 100,position = (0,0),initial_target = (0,0),fov = 60,chunksFile = "",fireSourceFile = ""):
+    def __init__(self,Source_of_fire_coordinate = None,source_description = None,radius = 100,position = (0,0),initial_target = (0,0),fov = 60,chunksFile = "",fireSourceFile = ""):
+        if Source_of_fire_coordinate is None:
+            print("missing source of fire coordinate")
+            return None
+        if source_description is None:
+            print("missing source of fire description")
+            return None
+        # KML STUFF
+        self.kml = simplekml.Kml()
+        self.firesource_point = self.kml.newpoint(name="source", coords = [Source_of_fire_coordinate])
+        self.firesource_point.description = source_description
+        self.kml.save("Task1.kml")
+
+        self.Source_of_fire_coordinate = Source_of_fire_coordinate
         self.search_radius = radius # search radius for the Valkie to search for targets
         self.position = position
         self.altitude = 0. # altitude of the Valkie
@@ -45,23 +59,23 @@ class UAV_GROUND_PERCEPTION:
         self.path_state = 0
         self.path = self.generate_path(initial_target)
         self.current_active_target = self.path[0]
-        self.Bounds = [] # TODO: define the bounds of the search area
         self.Ir_detector = HotspotDetector(camera_index= 4) #change cameraindex until it works ig.
-        self.MPI = MissionPlannerInterface(port=5760) # TODO: define the mission planner interface
+        self.MPI = MissionPlannerInterface() # TODO: define the mission planner interface
         self.previous_STAT = ""
+        '''
+        # # FILE PARSER CODE HERE
+        # self.MPFI_hotspot = MissionPlannerFileParser(chunksFile)
+        # self.MPFI_sourse = MissionPlannerFileParser(fireSourceFile)
+        # self.previous_chunk = ""
+        # self.counter_threshold = 20 # wait time in seconds
+        # self.fire_source_info = ""
+        # self.is_above_chunk = False
+        # self.counter = 0
+        '''
 
-        # FILE PARSER CODE HERE
-        self.MPFI_hotspot = MissionPlannerFileParser(chunksFile)
-        self.MPFI_sourse = MissionPlannerFileParser(fireSourceFile)
-        self.previous_chunk = ""
-        self.counter_threshold = 20 # wait time in seconds
-        self.fire_source_info = ""
-        self.is_above_chunk = False
-        self.counter = 0
+        self.hotspot_coordinates = set()
 
-        self.hotspot_coordinates = []
-
-
+        
     def are_within_range(tuple1, tuple2, tolerance=0.0001):
         lat1, lon1 = tuple1
         lat2, lon2 = tuple2
@@ -73,8 +87,7 @@ class UAV_GROUND_PERCEPTION:
         return lat_diff <= tolerance and lon_diff <= tolerance
     
    
-    def Is_OOB():#TODO: define the function to check if a position is out of bounds
-        pass
+   
     def generate_path(self, target_position):
         path_gen = CoordinateTransformer()
         path_relative = np.array([
@@ -120,10 +133,20 @@ class UAV_GROUND_PERCEPTION:
                         if frame is None:
                          print("No valid frame available yet.")
                          return -6
-                        #self.position = (str(float(self.position[0])/10000000), str(float(self.position[1])/10000000))
+                        self.position = (str(float(self.position[0])/10000000), str(float(self.position[1])/10000000))
                     
                         self.vision_output.append((frame, self.altitude, (self.position[0], self.position[1])))
-                        self.hotspot_coordinates.append(self.process_single_frame(self.vision_output[-1]))
+                        current_hotspot_count = len(self.hotspot_coordinates)
+                        new_hotspots_location = set()
+                        new_hotspots_location = (self.process_single_frame(self.vision_output[-1]))
+                        if len(new_hotspots_location) > 0:
+                            for hotspot in new_hotspots_location:
+                                self.hotspot_coordinates.add(hotspot)
+                                if len(self.hotspot_coordinates) > current_hotspot_count:
+                                    current_hotspot_count = len(self.hotspot_coordinates)
+                                    new_hotspot_point = self.kml.newpoint(name=f"Hotspot {current_hotspot_count}", coords = [(hotspot[0], hotspot[1])])
+                                    self.kml.save("Task1.kml")
+
                     else:
                         return -5
                 elif current_STAT == "X":
@@ -135,6 +158,8 @@ class UAV_GROUND_PERCEPTION:
                     return -4
         else:
             return -2
+        
+        '''
         # if self.fire_source_info == "":
         #     is_fire_source_file_present = not self.MPFI_sourse.update_dict() == None
         #     if is_fire_source_file_present:
@@ -202,10 +227,11 @@ class UAV_GROUND_PERCEPTION:
         #         return -6
         #     self.vision_output.append((frame,self.altitude,(float(self.position[0]),float(self.position[1]))))
         #     return 0
+        '''
 
     def process_single_frame(self, composite_frame): #SEE HERE
         frame, alt, pos = composite_frame
-        hotspot_location = (0.,0.)
+        hotspot_locations = set()
         p,c,t = self.Ir_detector.detect_hotspots(frame)
         X_dimension, Y_dimension, _ = frame.shape
         for contour in c:
@@ -216,9 +242,11 @@ class UAV_GROUND_PERCEPTION:
             x_distance = (x - X_dimension / 2) * chunk_length_half / X_dimension
             y_distance = (y - Y_dimension / 2) * chunk_length_half / Y_dimension
             lon, lat = coordinate_transformer.inverse_transformer.transform(x_distance, y_distance)
-            hotspot_location = (lat, lon)
+            if lat is None or lon is None:
+                continue
+            hotspot_locations.add((lat, lon))
 
-        return hotspot_location
+        return hotspot_locations
 
     def post_process(self):
         """
@@ -247,13 +275,15 @@ class UAV_GROUND_PERCEPTION:
         
         # Label detected hotspots with their sector
 
-def main():
+def main(source_coordinates, Source_description):
     """
     Main function to run the UAV_GROUND_PERCEPTION class.
     """
     # Initialize the UAV_GROUND_PERCEPTION class
-    uav_perception = UAV_GROUND_PERCEPTION(radius=100, position=(0, 0), initial_target=(0, 0), fov=60, chunksFile="", fireSourceFile="") # SEE HERE
-
+    uav_perception = UAV_GROUND_PERCEPTION(source_description=Source_description, Source_of_fire_coordinate=source_coordinates,radius=100, position=(0, 0), initial_target=(0, 0), fov=60, chunksFile="", fireSourceFile="") # SEE HERE
+    if uav_perception is None:
+        print("Unable to initialize UAV_GROUND_PERCEPTION")
+        return
     # Update the Valkie perception system
     while True:
         update_output = uav_perception.update()
@@ -304,7 +334,16 @@ def main():
     print("Current Position:", uav_perception.position)
     print("Vision Output:", uav_perception.vision_output)
 if __name__ == "__main__":
-    main()
+
+    main((50.101298,-110.738011),"Drone Crashed") #PARAMS HERE
+
+
+
+
+
+
+
+
     print(r""" -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- 
 -%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%-
 -%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%-

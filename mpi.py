@@ -70,7 +70,7 @@ class MissionPlannerInterface:
                 print("Waiting for STATUSTEXT message...")
                 msg = self.mavlink_connection.recv_match(type=['STATUSTEXT'],blocking = True)
                 if msg:
-                    if msg.get_type() == 'STATUSTEXT' and msg.severity ==2 and msg.text[0:4] == "STAT":
+                    if msg.get_type() == 'STATUSTEXT' and msg.severity ==6 and msg.text[0:4] == "STAT":
                         self.mavlink_dict = self.parse_line_to_dict(msg.text)
                         mavlink_stat_message_obtained = True
                     else:
