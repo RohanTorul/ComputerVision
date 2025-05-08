@@ -27,3 +27,16 @@
   - Now uses mission_planner_file_interface.py
   - processes each frame instead of all at once.
   - control+F "SEE HERE" to see what I changed
+
+ # UPDATE 05/08/2025
+ - ALMOST DONE!
+ - BEFORE RUNNING FINDER.PY:
+  - Make sure you input the initial source coordinates you'll get on Mission Planner at the source of fire/Balloons
+  - Make sure You are using the proper camera index.
+  - When it is running, it will be in multiple loops.
+    - first one is the Mavlink mission loop that will keep on going until it gets a STATX from Mission planner (PLEASE MAKE SURE YOU ARE RETURNING STATX)
+    - Second one is a post processing one, you can use that for validation of the KML file.
+    - Third one is a summary, displaying interactive images where you can click on the image and it will give you the corresponding lon lat coordinates.
+      - enter key to cycle through Unvalidated frames
+      - spacebar to cycle through validated frames
+      - q to quit
