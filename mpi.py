@@ -22,10 +22,10 @@ class MissionPlannerInterface:
 
 
 
-        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.socket.connect(('localhost', port))  # New port for socket subscriber
-        self.socket.setblocking(False)
-        self.dict = {}
+        # self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        # self.socket.connect(('localhost', port))  # New port for socket subscriber
+        # self.socket.setblocking(False)
+        # self.dict = {}
 
     def mavlink_connect(self):
         '''

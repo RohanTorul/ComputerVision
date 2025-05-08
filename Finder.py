@@ -3,9 +3,9 @@ from detect_ir import HotspotDetector
 from pyproj import Transformer
 import cv2
 from mpi import MissionPlannerInterface
-from mission_planner_file_interface import MissionPlannerFileParser
 import time
 import simplekml
+import pickle
 class CoordinateTransformer:
     def __init__(self):
         self.transformer = None
@@ -36,7 +36,7 @@ class CoordinateTransformer:
 
 
 class UAV_GROUND_PERCEPTION:
-    def __init__(self,Source_of_fire_coordinate = None,source_description = None,radius = 100,position = (0,0),initial_target = (0,0),fov = 60,chunksFile = "",fireSourceFile = ""):
+    def __init__(self,Source_of_fire_coordinate = None,source_description = None,position = (0,0),fov = 60):
         if Source_of_fire_coordinate is None:
             print("missing source of fire coordinate")
             return None
@@ -50,28 +50,16 @@ class UAV_GROUND_PERCEPTION:
         self.kml.save("Task1.kml")
 
         self.Source_of_fire_coordinate = Source_of_fire_coordinate
-        self.search_radius = radius # search radius for the Valkie to search for targets
         self.position = position
         self.altitude = 0. # altitude of the Valkie
         self.vision_output = []
         self.alpha = 0.
         self.fov = fov # field of view of the camera
-        self.path_state = 0
-        self.path = self.generate_path(initial_target)
-        self.current_active_target = self.path[0]
         self.Ir_detector = HotspotDetector(camera_index= 4) #change cameraindex until it works ig.
         self.MPI = MissionPlannerInterface() # TODO: define the mission planner interface
+        self.potentially_invalid_frames = []
         self.previous_STAT = ""
-        '''
-        # # FILE PARSER CODE HERE
-        # self.MPFI_hotspot = MissionPlannerFileParser(chunksFile)
-        # self.MPFI_sourse = MissionPlannerFileParser(fireSourceFile)
-        # self.previous_chunk = ""
-        # self.counter_threshold = 20 # wait time in seconds
-        # self.fire_source_info = ""
-        # self.is_above_chunk = False
-        # self.counter = 0
-        '''
+
 
         self.hotspot_coordinates = set()
 
@@ -86,27 +74,10 @@ class UAV_GROUND_PERCEPTION:
     
         return lat_diff <= tolerance and lon_diff <= tolerance
     
-   
-   
-    def generate_path(self, target_position):
-        path_gen = CoordinateTransformer()
-        path_relative = np.array([
-            (-self.search_radius, -self.search_radius), #TODO:hardcode this fing path.
-            (5, 0),
-            (5, 5),
-            (0, 5),
-            (-5, 5),
-            (-5, 10),
-            (0, 10),
-            (5, 10),
-            (5, 15),
-            (0, 15),
-        ])
-        path = path_gen.generate_path(target_position, path_relative)
-        return path
+
     
     def CV_GetVisionOutput(self):
-        frame = self.Ir_detector.return_valid_frame()
+        frame = self.Ir_detector.return_valid_frame_blocking()
         return frame
     
     def Mission_Planner_Get_Uav_Position(self):
@@ -132,8 +103,9 @@ class UAV_GROUND_PERCEPTION:
                         frame = self.CV_GetVisionOutput()
                         if frame is None:
                          print("No valid frame available yet.")
+                         self.potentially_invalid_frames.append((self.Ir_detector.return_frame(), self.altitude,  (str(float(self.position[0])/10000000), str(float(self.position[1])/10000000))))
                          return -6
-                        #self.position = (str(float(self.position[0])/10000000), str(float(self.position[1])/10000000))
+                        self.position = (str(float(self.position[0])/10000000), str(float(self.position[1])/10000000))
                     
                         self.vision_output.append((frame, self.altitude, (self.position[0], self.position[1])))
                         current_hotspot_count = len(self.hotspot_coordinates)
@@ -144,7 +116,8 @@ class UAV_GROUND_PERCEPTION:
                                 self.hotspot_coordinates.add(hotspot)
                                 if len(self.hotspot_coordinates) > current_hotspot_count:
                                     current_hotspot_count = len(self.hotspot_coordinates)
-                                    new_hotspot_point = self.kml.newpoint(name=f"Hotspot {current_hotspot_count}", coords = [(hotspot[0], hotspot[1])])
+                                    new_hotspot_point = self.kml.newpoint(name=f"Hotspot {current_hotspot_count}", coords = [(hotspot[1], hotspot[0])])
+                                    new_hotspot_point.altitudemode = simplekml.AltitudeMode.clamptoground
                                     self.kml.save("Task1.kml")
 
                     else:
@@ -159,80 +132,23 @@ class UAV_GROUND_PERCEPTION:
         else:
             return -2
         
-        '''
-        # if self.fire_source_info == "":
-        #     is_fire_source_file_present = not self.MPFI_sourse.update_dict() == None
-        #     if is_fire_source_file_present:
-        #         self.fire_source_info = self.MPFI_sourse.update_dict()
-        #     else:
-        #         return -2
-        # is_hotspot_file_present = not self.MPFI_hotspot.update_dict() == None
-        # if not is_hotspot_file_present:
-        #     return -3
-        # self.MPFI_hotspot.update_dict()
-        # if "CHUNK" in self.MPFI_hotspot.dict.keys():
-        #     current_chunk = self.MPFI_hotspot.dict["CHUNK"]
-        #     if current_chunk == self.previous_chunk:
-        #         self.counter += 1
-        #         if self.counter >= self.counter_threshold:
-        #             self.counter = 0
-        #             self.is_above_chunk = True # because this means that we are hovering over the same chunk
-        #         else: return 1 #counting
-        #     else:
-        #         self.previous_chunk = current_chunk
-        #         self.counter = 0
-        #         self.is_above_chunk = False
-        #         return 2 #new chunk detected
-        # else:
-        #     return -4
-        # if self.is_above_chunk:
-        #     if "POS" not in self.MPFI_hotspot.dict.keys() or "ALT" not in self.MPFI_hotspot.dict.keys():
-        #         return -5
-        #     self.altitude = self.MPFI_hotspot.dict["ALT"]  # Assuming 'ALT' is the key for altitude data
-        #     self.position = self.MPFI_hotspot.dict["POS"]  # Assuming 'POS' is the key for position data
-        #     if self.position is None or self.altitude is None:
-        #         print("was unable to get position or altitude")
-        #         return -5
-        #     self.position = self.position.split(',')
-        #     print("Valkie on target")
-        #     frame = self.CV_GetVisionOutput()
-        #     if frame is None:
-        #         print("No valid frame available yet.")
-        #         return -6
-        #     self.vision_output.append((frame, self.altitude, (self.position[0], self.position[1])))
-        #     self.hotspot_coordinates.append(self.process_single_frame(self.vision_output[-1]))
-        #     return 3
-
-        # status = int(self.MPI.get_data('STAT'))
-        # if status is None:
-        #     print("No data available yet.")
-        #     return -4
-        # if status == 0:
-        #     print("Valkie not on target")
-        #     return -3
-        # elif status == -1:
-        #     print("Valkie returning to base")
-        #     return -1
-        # elif status == 1:
-        #     self.altitude = self.MPI.get_data('ALT')  # Assuming 'ALT' is the key for altitude data
-        #     self.position = self.MPI.get_data('POS')  # Assuming 'POS' is the key for position data
-        #     if self.position is None or self.altitude is None:
-        #         print("was unable to get position or altitude")
-        #         return -5
-        #     self.position = self.position.split(',')
-        #     print("Valkie on target")
-        #     frame = self.CV_GetVisionOutput()
-        #     if frame is None:
-        #         print("No valid frame available yet.")
-        #         return -6
-        #     self.vision_output.append((frame,self.altitude,(float(self.position[0]),float(self.position[1]))))
-        #     return 0
-        '''
+      
 
     def process_single_frame(self, composite_frame): #SEE HERE
         frame, alt, pos = composite_frame
         hotspot_locations = set()
-        p,c,t = self.Ir_detector.detect_hotspots(frame)
+        max_contrast = 40
+        processed_contours = []
+        processed_frame = []
+        for contrast_threshold in range(0, max_contrast, 5):
+            _,c,_ = self.Ir_detector.detect_hotspots(frame,min_area=4.5,max_area = 100, intensity_percentile = 99.5,contrast_threshold=contrast_threshold,circularity_threshold=0.8)
+            if c is None or len(c) == 0:
+                continue
+            else:
+                processed_contours.append(c) 
+                #processed_frame.append(f)
+        if processed_contours is None or len(processed_contours) == 0:
+            return set()
         X_dimension, Y_dimension, _ = frame.shape
         for contour in c:
             x, y, w, h = cv2.boundingRect(contour)
@@ -254,20 +170,8 @@ class UAV_GROUND_PERCEPTION:
         """
         hotspot_locations= []
 
-        for frame, alt, pos in self.vision_output:
-            p, c, t = self.Ir_detector.detect_hotspots(frame)
-            X_dimension, Y_dimension, _ = frame.shape
-            for contour in c:
-                x, y, w, h = cv2.boundingRect(contour)
-                chunk_length_half = float(alt)* np.tan(np.radians(self.fov/2)) # TODO: check if this is correct#
-
-                coordinate_transformer = CoordinateTransformer()
-                coordinate_transformer.init_transformer(pos[0], pos[1])
-                x_distance = (x - X_dimension / 2) * chunk_length_half / X_dimension
-                y_distance = (y - Y_dimension / 2) * chunk_length_half / Y_dimension
-                lon, lat = coordinate_transformer.inverse_transformer.transform(x_distance, y_distance)
-                hotspot_locations.append((lat, lon))
-        # Get frame dimensions
+        for composite_frame in self.vision_output:
+            hotspot_locations.extend(self.process_single_frame(composite_frame))    
 
         return hotspot_locations
 
@@ -275,12 +179,24 @@ class UAV_GROUND_PERCEPTION:
         
         # Label detected hotspots with their sector
 
+def mouse_callback(event, x, y, flags, param):
+    if event == cv2.EVENT_LBUTTONDOWN:
+        alt,pos = param
+        chunk_length_half = float(alt)* np.tan(np.radians(60/2)) # TODO: check if this is correct#
+        coordinate_transformer = CoordinateTransformer()
+        coordinate_transformer.init_transformer(pos[0], pos[1])
+        x_distance = (x - 640 / 2) * chunk_length_half / 640
+        y_distance = (y - 480 / 2) * chunk_length_half / 480
+        lon, lat = coordinate_transformer.inverse_transformer.transform(x_distance, y_distance)
+        print(f"Clicked coordinates: x={x}, y={y}")
+        print(f"Clicked coordinates: x={lon}, y={lat}")
+
 def main(source_coordinates, Source_description):
     """
     Main function to run the UAV_GROUND_PERCEPTION class.
     """
     # Initialize the UAV_GROUND_PERCEPTION class
-    uav_perception = UAV_GROUND_PERCEPTION(source_description=Source_description, Source_of_fire_coordinate=source_coordinates,radius=100, position=(0, 0), initial_target=(0, 0), fov=60, chunksFile="", fireSourceFile="") # SEE HERE
+    uav_perception = UAV_GROUND_PERCEPTION(source_description=Source_description, Source_of_fire_coordinate=source_coordinates) # SEE HERE
     if uav_perception is None:
         print("Unable to initialize UAV_GROUND_PERCEPTION")
         return
@@ -307,35 +223,52 @@ def main(source_coordinates, Source_description):
             continue
 
     print("Hotspot locations:",uav_perception.post_process())
+    data = {
+        "vision_output": uav_perception.vision_output,
+        "potentially_invalid_frames": uav_perception.potentially_invalid_frames
+    }
+    with open(f"data_{str(time.strftime('%Y%m%d%H%M%S', time.localtime()))}.pkl", "wb") as f:
+        pickle.dump(data, f)
+        print("Data saved to data_<time>.pkl")
 
-    contours = []
-    for frame in uav_perception.vision_output:
-        _,c,_ = uav_perception.Ir_detector.detect_hotspots(frame[0])
-        
-        contours.append(c)
 
-
-    frame_number = 0 
     while True:
-        frame_number = (frame_number + 1)
-        if frame_number == len(uav_perception.vision_output):
+        if len(uav_perception.potentially_invalid_frames) == 0 and len(uav_perception.vision_output) == 0:
             break
-        # Process the vision output
-        cv2.drawContours(uav_perception.vision_output[frame_number][0], contours[frame_number], -1, (0, 0, 255), 2)
-        # Check for exit condition (e.g., key press)
-        cv2.imshow(f"Vision Output {uav_perception.vision_output[-1][1]},{uav_perception.vision_output[frame_number][2]}", uav_perception.vision_output[frame_number][0])
-    
-    while True:
+        index_valid = 0
+        index_invalid = 0
+        if len(uav_perception.potentially_invalid_frames) > 0:
+            frame_invalid, alt_invalid, pos_invalid = uav_perception.potentially_invalid_frames[index_invalid]
+            cv2.imshow(f"Invalid hotspot locations {alt_invalid},{pos_invalid}", frame_invalid)
+            cv2.setMouseCallback(f"Invalid hotspot locations {alt_invalid},{pos_invalid}", mouse_callback,(alt_invalid, pos_invalid))
+
+        if len(uav_perception.vision_output) > 0:
+            frame_valid, alt_valid, pos_valid = uav_perception.vision_output[index_valid]
+            cv2.imshow(f"Valid Hotspot locations {alt_valid},{pos_valid}", frame_valid)
+            cv2.setMouseCallback(f"Valid Hotspot locations {alt_valid},{pos_valid}", mouse_callback,(alt_valid, pos_valid))
+        
         if cv2.waitKey(1) & 0xFF == ord('q'):
             cv2.destroyAllWindows()
             break
+        if cv2.waitKey(1) & 0xff == 32:
+            print("next valid frame")
+            index_valid = (index_valid + 1)
+            if index_valid == len(uav_perception.vision_output):
+                index_valid = 0
+        if cv2.waitKey(1) & 0xff == 13:
+            print("next invalid frame")
+            index_invalid = index_invalid + 1
+            if index_invalid >= len(uav_perception.potentially_invalid_frames):
+                index_invalid = 0
 
     # Print the current position and vision output
-    print("Current Position:", uav_perception.position)
+    
     print("Vision Output:", uav_perception.vision_output)
+    
+
 if __name__ == "__main__":
 
-    main((50.101298,-110.738011),"Drone Crashed") #PARAMS HERE
+    main((-110.738011,50.101298,),"Drone Crashed") #PARAMS HERE
 
 
 

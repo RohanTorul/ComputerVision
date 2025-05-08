@@ -5,31 +5,7 @@
             <name>source</name>
             <description>Drone Crashed</description>
             <Point id="2">
-                <coordinates>50.101298,-110.738011,0.0</coordinates>
-            </Point>
-        </Placemark>
-        <Placemark id="5">
-            <name>Hotspot 1</name>
-            <Point id="4">
-                <coordinates>50.10061196468778,-110.73814974863419,0.0</coordinates>
-            </Point>
-        </Placemark>
-        <Placemark id="7">
-            <name>Hotspot 2</name>
-            <Point id="6">
-                <coordinates>50.101077337590375,-110.73689686858359,0.0</coordinates>
-            </Point>
-        </Placemark>
-        <Placemark id="9">
-            <name>Hotspot 3</name>
-            <Point id="8">
-                <coordinates>50.10101463593969,-110.73848441526233,0.0</coordinates>
-            </Point>
-        </Placemark>
-        <Placemark id="11">
-            <name>Hotspot 4</name>
-            <Point id="10">
-                <coordinates>50.10146512245977,-110.73779581615618,0.0</coordinates>
+                <coordinates>-110.738011,50.101298,0.0</coordinates>
             </Point>
         </Placemark>
     </Document>
