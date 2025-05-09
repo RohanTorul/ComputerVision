@@ -104,9 +104,10 @@ class UAV_GROUND_PERCEPTION:
         dict = self.MPI.mavlink_dict
         if dict:
             current_STAT = dict["STAT"] if "STAT" in dict.keys() else self.previous_STAT
-            print("current_STAT: ",current_STAT)
+            #print("current_STAT: ",current_STAT)
             if current_STAT != self.previous_STAT:
                 self.previous_STAT = current_STAT
+                print("self.current_STAT: ",current_STAT)
                 if current_STAT == "0":
                     return -4
                 elif current_STAT == "1":
@@ -119,11 +120,14 @@ class UAV_GROUND_PERCEPTION:
                         if frame is None:
                          print("No valid frame available yet.")
                          self.potentially_invalid_frames.append((self.Ir_detector.return_frame(), self.altitude, (self.position[0], self.position[1])))
+                         print("potentially_invalid_frame saved ",len(self.potentially_invalid_frames))
                          return -6
                         self.vision_output.append((frame, self.altitude, (self.position[0], self.position[1])))
+                        print("valid frame received ",len(self.vision_output))
                         current_hotspot_count = len(self.hotspot_coordinates)
+                        print("current_hotspot_count: ",current_hotspot_count)
                         new_hotspots_location = set()
-                        new_hotspots_location = (self.process_single_frame(self.vision_output[-1]))
+                        new_hotspots_location = (self.process_single_frame((frame.copy(), self.altitude, (self.position[0], self.position[1]))))
                         if len(new_hotspots_location) > 0:
                             for hotspot in new_hotspots_location:
                                 self.hotspot_coordinates.add(hotspot)
@@ -132,6 +136,8 @@ class UAV_GROUND_PERCEPTION:
                                     new_hotspot_point = self.kml.newpoint(name=f"Hotspot {current_hotspot_count}", coords = [(hotspot[1], hotspot[0])])
                                     new_hotspot_point.altitudemode = simplekml.AltitudeMode.clamptoground
                                     self.kml.save("Task1.kml")
+                        print("current_hotspot_count: ",current_hotspot_count)
+                        print("current_hotspot_locations: ",self.hotspot_coordinates)
 
                     else:
                         return -5
@@ -154,7 +160,7 @@ class UAV_GROUND_PERCEPTION:
         max_contrast = 40
         processed_contours = []
         for contrast_threshold in range(5, max_contrast, 5):
-            _,c,_ = self.Ir_detector.detect_hotspots(frame.copy(),min_area=4.5,max_area = 100, intensity_percentile = 99.5,contrast_threshold=contrast_threshold,circularity_threshold=0.55)
+            _,c,_ = self.Ir_detector.detect_hotspots(frame,min_area=4.5,max_area = 100, intensity_percentile = 99.5,contrast_threshold=contrast_threshold,circularity_threshold=0.55)
             if c is None or len(c) == 0:
                 continue
             else:
@@ -217,26 +223,29 @@ def main(source_coordinates, Source_description, camera_index = 4):
     constant_display_thread.daemon = True
     constant_display_thread.start()
     # Update the Valkie perception system
+    prev_output = None
     while True:
         update_output = uav_perception.update()
-        if update_output == -1:
-            print("Valkie returning to base")
-            break
-        if update_output == -2:
-            print("Dict not available")
-            continue
-        if update_output == -3:
-            print("Valkie is on the same target as before")
-            continue
-        if update_output == -4:
-            print("Valkie is moving to a target")
-            continue
-        if update_output == -5:
-            print("unable to get Valkie's position or altitude")
-            continue
-        if update_output == -6:
-            print("No valid frame available")
-            continue
+        if prev_output != update_output:
+            prev_output = update_output
+            if update_output == -1:
+                print("Valkie returning to base")
+                break
+            if update_output == -2:
+                print("Dict not available")
+                continue
+            if update_output == -3:
+                print("Valkie is on the same target as before")
+                continue
+            if update_output == -4:
+                print("Valkie is moving to a target")
+                continue
+            if update_output == -5:
+                print("unable to get Valkie's position or altitude")
+                continue
+            if update_output == -6:
+                print("No valid frame available")
+                continue
 
 
     data = {
@@ -268,9 +277,7 @@ def main(source_coordinates, Source_description, camera_index = 4):
                 break
             if cv2.waitKey(1) & 0xff == 32:
                 print("next valid frame")
-                index_valid = (index_valid + 1)
-                if index_valid == len(uav_perception.vision_output):
-                    index_valid = 0
+                index_valid = (index_valid + 1)%len(uav_perception.vision_output)
                 print("next valid frame: ", index_valid)
     except Exception as e:
         print(e)
@@ -289,9 +296,7 @@ def main(source_coordinates, Source_description, camera_index = 4):
                 break
             if cv2.waitKey(1) & 0xff == 32:
                
-                index_invalid = (index_invalid + 1)
-                if index_invalid == len(uav_perception.vision_output):
-                    index_invalid = 0
+                index_invalid = (index_invalid + 1)%len(uav_perception.potentially_invalid_frames)
                 print("next valid frame: ", index_invalid)
     except Exception as e:
         print(e)
@@ -299,11 +304,11 @@ def main(source_coordinates, Source_description, camera_index = 4):
         return
 
             
-    print("Vision Output:", uav_perception.vision_output)
+    #print("Vision Output:", uav_perception.vision_output)
     
 
 if __name__ == "__main__":
-    argparser = argparse.ArgumentParser("\n Requires the latitude and longitude and description of the source of fire to start the KML file.\n Camera index is set at 4 by default. Use --camera_index to change it. \n")
+    argparser = argparse.ArgumentParser("\n Requires the latitude and longitude and description of the source of fire to start the KML file.\n Camera index is set at 4 by default. Use --camera_index to change it. \n",fromfile_prefix_chars='@')
     argparser.add_argument("lat", type=float, default=None,help="latitude of source of fire")
     argparser.add_argument("lon", type=float, default=None,help="longitude of source of fire")
     argparser.add_argument("description", type=str, default=None,help="description of the source of fire")
