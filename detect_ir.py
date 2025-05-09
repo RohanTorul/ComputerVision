@@ -253,7 +253,7 @@ class HotspotDetector:
 
     def validate_frame(self, frame): #check if the signal was good or something
        
-        if self.is_static_noise(frame=frame,laplacian_thresh=260,hist_spike_thresh=10): 
+        if self.is_static_noise(frame=frame,laplacian_thresh=255,hist_spike_thresh=13): 
             print("Error: Frame has static noise.")
             return False
         if self.is_all_blue(frame) or self.is_all_black(frame):
@@ -282,11 +282,9 @@ class HotspotDetector:
         Returns a valid frame from the camera, blocking until a valid frame is available.
         """
         start_time = time.time()
-        current_time = start_time
         while True:
-            current_time = time.time()
-            if current_time - start_time > 2.6:
-                print("Error: No valid frames received within 5 seconds.")
+            if time.time() - start_time > 2.6:
+                print("Error: No valid frames received within 2.6 seconds.")
                 return None
             frame = self.return_valid_frame()
             if frame is not None:

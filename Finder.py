@@ -6,6 +6,7 @@ from mpi import MissionPlannerInterface
 import time
 import simplekml
 import pickle
+import threading
 class CoordinateTransformer:
     def __init__(self):
         self.transformer = None
@@ -85,6 +86,18 @@ class UAV_GROUND_PERCEPTION:
     
     # "STAT:1..;POS:(lat,lon);ALT:altitude;\n"
 
+    def show_ir_frame(self):
+        while True:
+            frame = self.Ir_detector.return_frame()
+            if frame is not None:
+                cv2.imshow("frame", frame)
+                if cv2.waitKey(1) & 0xFF == ord('q'):
+                    break
+            else:
+                time.sleep(0.1)  # avoid busy loop
+        cv2.destroyWindow("frame") 
+
+
     def update(self): #SEE HERE
         self.MPI.mavlink_step()
         dict = self.MPI.mavlink_dict
@@ -100,13 +113,12 @@ class UAV_GROUND_PERCEPTION:
                     self.position = dict["POS"] if "POS" in dict.keys() else None
                     if self.position and self.altitude:
                         self.position = self.position.split(',')
-                        frame = self.CV_GetVisionOutput()
+                        self.position = (str(float(self.position[0])/10000000), str(float(self.position[1])/10000000))
+                        frame = self.CV_GetVisionOutput() #uses blocking method, waits for at most 2.6 seconds for a valid frame.
                         if frame is None:
                          print("No valid frame available yet.")
-                         self.potentially_invalid_frames.append((self.Ir_detector.return_frame(), self.altitude,  (str(float(self.position[0])/10000000), str(float(self.position[1])/10000000))))
+                         self.potentially_invalid_frames.append((self.Ir_detector.return_frame(), self.altitude, (self.position[0], self.position[1])))
                          return -6
-                        self.position = (str(float(self.position[0])/10000000), str(float(self.position[1])/10000000))
-                    
                         self.vision_output.append((frame, self.altitude, (self.position[0], self.position[1])))
                         current_hotspot_count = len(self.hotspot_coordinates)
                         new_hotspots_location = set()
@@ -123,6 +135,7 @@ class UAV_GROUND_PERCEPTION:
                     else:
                         return -5
                 elif current_STAT == "X":
+                    
                     return -1
             else:
                 if current_STAT == "1" or current_STAT == "X":
@@ -139,9 +152,8 @@ class UAV_GROUND_PERCEPTION:
         hotspot_locations = set()
         max_contrast = 40
         processed_contours = []
-        processed_frame = []
-        for contrast_threshold in range(0, max_contrast, 5):
-            _,c,_ = self.Ir_detector.detect_hotspots(frame,min_area=4.5,max_area = 100, intensity_percentile = 99.5,contrast_threshold=contrast_threshold,circularity_threshold=0.8)
+        for contrast_threshold in range(5, max_contrast, 5):
+            _,c,_ = self.Ir_detector.detect_hotspots(frame.copy(),min_area=4.5,max_area = 100, intensity_percentile = 99.5,contrast_threshold=contrast_threshold,circularity_threshold=0.55)
             if c is None or len(c) == 0:
                 continue
             else:
@@ -189,7 +201,7 @@ def mouse_callback(event, x, y, flags, param):
         y_distance = (y - 480 / 2) * chunk_length_half / 480
         lon, lat = coordinate_transformer.inverse_transformer.transform(x_distance, y_distance)
         print(f"Clicked coordinates: x={x}, y={y}")
-        print(f"Clicked coordinates: x={lon}, y={lat}")
+        print(f"Clicked coordinates: lon={lon}, lat={lat}")
 
 def main(source_coordinates, Source_description):
     """
@@ -200,6 +212,9 @@ def main(source_coordinates, Source_description):
     if uav_perception is None:
         print("Unable to initialize UAV_GROUND_PERCEPTION")
         return
+    constant_display_thread = threading.Thread(target = uav_perception.show_ir_frame)
+    constant_display_thread.daemon = True
+    constant_display_thread.start()
     # Update the Valkie perception system
     while True:
         update_output = uav_perception.update()
@@ -222,7 +237,7 @@ def main(source_coordinates, Source_description):
             print("No valid frame available")
             continue
 
-    print("Hotspot locations:",uav_perception.post_process())
+
     data = {
         "vision_output": uav_perception.vision_output,
         "potentially_invalid_frames": uav_perception.potentially_invalid_frames
@@ -232,37 +247,57 @@ def main(source_coordinates, Source_description):
         print("Data saved to data_<time>.pkl")
 
 
-    while True:
-        if len(uav_perception.potentially_invalid_frames) == 0 and len(uav_perception.vision_output) == 0:
-            break
-        index_valid = 0
-        index_invalid = 0
-        if len(uav_perception.potentially_invalid_frames) > 0:
-            frame_invalid, alt_invalid, pos_invalid = uav_perception.potentially_invalid_frames[index_invalid]
-            cv2.imshow(f"Invalid hotspot locations {alt_invalid},{pos_invalid}", frame_invalid)
-            cv2.setMouseCallback(f"Invalid hotspot locations {alt_invalid},{pos_invalid}", mouse_callback,(alt_invalid, pos_invalid))
-
-        if len(uav_perception.vision_output) > 0:
+    print("Hotspot locations:",uav_perception.post_process())
+    print("waiting for you to press 'q' to exit current camera feed that's running on another thread")
+    constant_display_thread.join()
+    index_valid = 0
+    index_invalid = 0
+    try:
+        while True:
+            if len(uav_perception.vision_output) == 0:
+                print("No valid frames available ", len(uav_perception.vision_output))
+                break
+            
             frame_valid, alt_valid, pos_valid = uav_perception.vision_output[index_valid]
-            cv2.imshow(f"Valid Hotspot locations {alt_valid},{pos_valid}", frame_valid)
-            cv2.setMouseCallback(f"Valid Hotspot locations {alt_valid},{pos_valid}", mouse_callback,(alt_valid, pos_valid))
-        
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            cv2.destroyAllWindows()
-            break
-        if cv2.waitKey(1) & 0xff == 32:
-            print("next valid frame")
-            index_valid = (index_valid + 1)
-            if index_valid == len(uav_perception.vision_output):
-                index_valid = 0
-        if cv2.waitKey(1) & 0xff == 13:
-            print("next invalid frame")
-            index_invalid = index_invalid + 1
-            if index_invalid >= len(uav_perception.potentially_invalid_frames):
-                index_invalid = 0
+            cv2.imshow(f"Valid Hotspot locations", frame_valid)
+            cv2.setMouseCallback(f"Valid Hotspot locations", mouse_callback,(alt_valid, pos_valid))
+            
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                cv2.destroyAllWindows()
+                break
+            if cv2.waitKey(1) & 0xff == 32:
+                print("next valid frame")
+                index_valid = (index_valid + 1)
+                if index_valid == len(uav_perception.vision_output):
+                    index_valid = 0
+                print("next valid frame: ", index_valid)
+    except Exception as e:
+        print(e)
+        cv2.destroyAllWindows()
+        return
+    try:
+        while True:
+            if len(uav_perception.potentially_invalid_frames) <= 0:
+                print("No invalid frames available ", len(uav_perception.potentially_invalid_frames))
+                break
+            frame_invalid, alt_invalid, pos_invalid = uav_perception.potentially_invalid_frames[index_invalid]
+            cv2.imshow(f"Invalid hotspot locations", frame_invalid)
+            cv2.setMouseCallback("Invalid hotspot locations", mouse_callback,(alt_invalid, pos_invalid))
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                cv2.destroyAllWindows()
+                break
+            if cv2.waitKey(1) & 0xff == 32:
+               
+                index_invalid = (index_invalid + 1)
+                if index_invalid == len(uav_perception.vision_output):
+                    index_invalid = 0
+                print("next valid frame: ", index_invalid)
+    except Exception as e:
+        print(e)
+        cv2.destroyAllWindows()
+        return
 
-    # Print the current position and vision output
-    
+            
     print("Vision Output:", uav_perception.vision_output)
     
 
