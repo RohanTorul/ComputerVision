@@ -1,48 +1,72 @@
-local CHECK_INTERVAL = 100 -- 0.1 second between checks
-local HOVER_THRESHOLD = 0.5 -- m/s velocity considered as hovering
+---@diagnostic disable
+-- https://mavlink.io/en/messages/ardupilotmega.html
 
-function get_velocity()
-    local vel = ahrs:get_velocity_NED()
-    if not vel then return 0 end
-    return vel:length()
+-- keep this at the top of your script:
+local recorded_coords = {}
+local COORD_TOL = 1e-5
+
+-- helper: has this (lat,lon) already been recorded?
+local function coord_exists(lat, lon)
+  for _, p in ipairs(recorded_coords) do
+    if math.abs(p.lat - lat) < COORD_TOL
+       and math.abs(p.lon - lon) < COORD_TOL then
+      return true
+    end
+  end
+  return false
 end
 
-function is_hovering()
-    return get_velocity() < HOVER_THRESHOLD and baro:get_altitude() > 5.0
-end
-
-function is_returning_home()
-    return vehicle:get_mode() == "RTL" -- Assumes ArduPilot mode names
-end
-
-function send_status(hover_state)
-    local myalt = baro:get_altitude()
-    local mypos = ahrs:get_position()
+-- your regular update() function, running once per second:
+local function update()
+  gcs:send_text(6, "STAT:0.00;ALT:0.00;POS:0.00,0.00")
     
-    if hover_state == 1 then
-        gcs:send_text(2, string.format("STAT:1;ALT:%.6f;POS:%.1f,%.1f\n", 
-                      -myalt, mypos:lat(), mypos:lng()))
-    elseif hover_state == 2 then
-        gcs:send_text(2, "STAT:X;ALT:0.00;POS:0.0,0.0\n")
+  -- 1) read vehicle ground speed
+  if not ahrs:get_velocity_NED() then
+    gcs:send_text(6, "STAT:0.00;ALT:0.00;POS:0.00,0.00")
+    return update, 1000
+  end
+  local speed = ahrs:get_velocity_NED():length()
+
+  -- 2) if effectively stopped, grab GPS + altitude and record
+  if speed <= 0.5 then
+    local gps = gps:location(0)  -- Fetch the first GPS device's location
+    if gps then
+      local lat = gps:lat() / 1e7  -- Convert from 1e7 to normal degrees
+      local lon = gps:lng() / 1e7  -- Convert from 1e7 to normal degrees
+      -- read altitude from barometer (in metres)
+      local alt = baro:get_altitude() or 0
+
+      if not coord_exists(lat, lon) then
+        -- log to GCS
+        gcs:send_text(6, string.format("STAT:1;ALT:%.1f;POS:%.10f,%.10f", alt, lat, lon))
+        -- store it
+        table.insert(recorded_coords, {
+          lat = lat,
+          lon = lon,
+          alt = alt
+        })
+      else
+        gcs:send_text(6, "STAT:0.00;ALT:0.00;POS:0.00,0.00")
+      end
     else
-        gcs:send_text(2, "STAT:0;ALT:0.00;POS:0.0,0.0\n")
+      gcs:send_text(6, "STAT:0.00;ALT:0.00;POS:0.00,0.00")
     end
+  else
+    gcs:send_text(6, "STAT:0.00;ALT:0.00.00;POS:0.00,0.00")
+  end
+
+  if baro:get_altitude() > 23 then
+    while true do
+      gcs:send_text(6, "STAT:X;ALT:0.00;POS:0.00,0.00")
+    end
+
+  end
+
+  -- …any other periodic work here…
+
+  -- schedule next call in 1000 ms
+  return update, 1000
 end
 
-function update()
-    if not arming:is_armed() then
-        if not arming:arm() then
-            return update, CHECK_INTERVAL
-        end
-    end
-    if is_returning_home() then
-        send_status(2)
-    elseif is_hovering() then
-        send_status(1)
-    else
-        send_status(0)
-    end
-    return update, CHECK_INTERVAL
-end
-
+-- launch the loop
 return update()

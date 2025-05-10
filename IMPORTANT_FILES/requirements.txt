@@ -1,0 +1,4 @@
+mavutil
+numpy
+simplekml
+opencv-python
